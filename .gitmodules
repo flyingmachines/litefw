@@ -1,0 +1,3 @@
+[submodule "serial_bridge/c_library_v1"]
+	path = serial_bridge/c_library_v1
+	url = https://github.com/mavlink/c_library_v1
