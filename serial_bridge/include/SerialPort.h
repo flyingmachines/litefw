@@ -93,6 +93,12 @@ namespace serialboost {
 		void handle_message_heartbeat(mavlink_message_t *msg);
 
 		void handle_message_attitude(mavlink_message_t *msg);
+
+        void handle_message_mission_item(mavlink_message_t *msg);
+
+        void handle_message_mission_item_reached(mavlink_message_t *msg);
+
+        void handle_message_mission_count(mavlink_message_t *msg);
 		
 		//void testfunc();
 

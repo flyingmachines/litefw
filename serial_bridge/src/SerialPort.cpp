@@ -39,9 +39,7 @@ void serialboost::SerialPort::ReadBegin() {
 void serialboost::SerialPort::ReadComplete(
     const boost::system::error_code &ec, size_t bytesTransferred) {
     if (!ec) {
-        if (_onRead && (bytesTransferred > 0)){
-            _onRead(boost::ref(_serialPort.get_io_service()), 
-                boost::cref(_readBuffer), bytesTransferred);
+        if (bytesTransferred > 0){
 				
 			for(int i=0; i < bytesTransferred; i++){
 				if(mavlink_parse_char(MAVLINK_COMM_0,boost::cref(_readBuffer[i]),&_msg,&_status))
@@ -72,6 +70,17 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 			handle_message_attitude(msg);
 			break;
 
+        case MAVLINK_MSG_ID_MISSION_ITEM_REACHED:
+            handle_message_mission_item_reached(msg);
+            break;
+
+        case MAVLINK_MSG_ID_MISSION_COUNT:
+            handle_message_mission_count(msg);
+            break;
+        case MAVLINK_MSG_ID_MISSION_ITEM:
+            handle_message_mission_item(msg);
+            break;
+
 		//case MAVLINK_MSG_ID_LOCAL_POSITION_NED:
 		//	handle_message_lpos_ned(msg);
 		//	break;
@@ -84,6 +93,29 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
  		}
  	}
 
+void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg)
+    {
+        mavlink_mission_item_t mission;
+        mavlink_msg_mission_item_decode(msg, &mission);
+
+        std::cout << unsigned(mission.seq) << " "<< mission.x << " "<< mission.y << std::endl;
+    }
+
+void serialboost::SerialPort::handle_message_mission_count(mavlink_message_t *msg)
+    {
+        mavlink_mission_count_t missioncount;
+        mavlink_msg_mission_count_decode(msg, &missioncount);
+
+        //std::cout << unsigned(missioncount.count) << std::endl;
+    }
+
+void serialboost::SerialPort::handle_message_mission_item_reached(mavlink_message_t *msg)
+    {
+        mavlink_mission_item_reached_t missionreached;
+        mavlink_msg_mission_item_reached_decode(msg, &missionreached);
+
+        //std::cout << unsigned(missionreached.seq) << std::endl;
+    }
 void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
  	{
 		
