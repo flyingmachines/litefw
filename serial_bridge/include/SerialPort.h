@@ -8,6 +8,7 @@
 #include <boost/iostreams/device/file.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <ostream>
 #include <sys/time.h>
 #include <boost/chrono.hpp>
@@ -70,6 +71,10 @@ namespace serialboost {
 	
 		zmq::socket_t _subscriber;
 
+        boost::posix_time::ptime _started;
+
+        boost::posix_time::ptime _current;
+
 		//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
 		
 		//boost::posix_time::ptime ended_;
@@ -84,7 +89,9 @@ namespace serialboost {
         
         void WriteBegin();
         
-		void WriteToPixhawk();        
+		void WriteToPixhawk(); 
+
+        void WriteToPixhawkOffboardSetpoint(uint32_t ms, float x, float y, float z, float vx, float vy, float vz, float afx, float afy, float afz, float yaw, float yaw_rate);       
 		
 		void WriteComplete(const boost::system::error_code &ec);
 
@@ -124,6 +131,8 @@ namespace serialboost {
         void Write(const std::string &buffer);	
 
 		void testfunc();
+
+        void sendoffboardcommands();
     };
 };
 

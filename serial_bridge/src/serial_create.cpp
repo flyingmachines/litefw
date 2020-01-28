@@ -13,8 +13,12 @@ void serial_create::Create(boost::asio::io_service &ios) {
 			_serialPort->openport(_baudRate);
 
 			boost::thread subthread(boost::bind(&serialboost::SerialPort::testfunc, _serialPort));	
+
+			boost::thread offboardthread(boost::bind(&serialboost::SerialPort::sendoffboardcommands, _serialPort));
 				
-			subthread.detach();			
+			subthread.detach();	
+
+			offboardthread.detach();		
 
         } catch (const std::exception &e) {
 

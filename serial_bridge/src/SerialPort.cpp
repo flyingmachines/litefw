@@ -3,7 +3,14 @@
 
 serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService, 
     const std::string &portName) : 
-    _serialPort(ioService, portName), _isOpen(false), _context(1), _publisher(_context, ZMQ_PUB), _contextsub(1), _subscriber(_contextsub, ZMQ_SUB)/*buf("rollnew.txt")*/{
+    _serialPort(ioService, portName), 
+    _isOpen(false), 
+    _context(1), 
+    _publisher(_context, ZMQ_PUB), 
+    _contextsub(1), 
+    _subscriber(_contextsub, ZMQ_SUB),
+    _started(boost::posix_time::microsec_clock::local_time()),
+    _current(boost::posix_time::microsec_clock::local_time())/*buf("rollnew.txt")*/{
     _readBuffer.resize(128);
 	_publisher.bind("tcp://127.0.0.1:5563");
 }
@@ -140,6 +147,21 @@ void serialboost::SerialPort::WriteToPixhawk(){
 
 		//std::cout << "here" << std::endl;
 	}
+
+void serialboost::SerialPort::WriteToPixhawkOffboardSetpoint(uint32_t ms, float x, float y, float z, float vx, float vy, float vz, float afx, float afy, float afz, float yaw, float yaw_rate ){
+        mavlink_message_t msg;
+        uint8_t buffer[128];
+        uint16_t typemask = 0b0000110111000111;
+
+        mavlink_msg_set_position_target_local_ned_pack(1, 1, &msg, ms, 1, 1, 8, typemask, x, y, z, vx, vy, vz, afx, afy, afz, yaw, yaw_rate);
+
+        size_t len = mavlink_msg_to_send_buffer(buffer, &msg);
+
+        std::vector<unsigned char> vec(buffer, buffer + len);
+
+        Write(&vec[0], vec.size());
+
+}
 
 void serialboost::SerialPort::Write(const unsigned char *buffer, 
     size_t bufferLength) {
@@ -292,5 +314,48 @@ void serialboost::SerialPort::testfunc()
 	 	std::cout << "Error occurred " << std::endl;
 	 }		
 	
+}
+
+void serialboost::SerialPort::sendoffboardcommands()
+{
+    int count = 0;
+    uint32_t millis = 0;
+    float vx = 0.0;
+    float vy = 0.0;
+
+    try{
+        while(true){
+
+            if (count == 100){
+                vx = 1.0;
+                vy = 0.0;
+            }else if(count == 200){
+                vx = 0.0;
+                vy = 1.0;
+            }else if(count == 300){
+                vx = -1.0;
+                vy = 0.0;
+            }else if(count == 400){
+                vx =  0.0;
+                vy = -1.0;
+                count=0;
+            }else{}
+
+            count++;
+
+            usleep(10000);
+            _current = boost::posix_time::microsec_clock::local_time();
+            boost::posix_time::time_duration timelapsed = _current - _started;
+            millis = timelapsed.total_milliseconds();
+
+            WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.0, vx, vy, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+            if(count == 200){
+                std::cout <<  millis << std::endl;
+                }
+            }
+        }
+    catch (std::exception &e){
+        std::cout << "Error occured " << std::endl;
+    }
 }
 
