@@ -151,9 +151,10 @@ void serialboost::SerialPort::WriteToPixhawk(){
 void serialboost::SerialPort::WriteToPixhawkOffboardSetpoint(uint32_t ms, float x, float y, float z, float vx, float vy, float vz, float afx, float afy, float afz, float yaw, float yaw_rate ){
         mavlink_message_t msg;
         uint8_t buffer[128];
-        uint16_t typemask = 0b0000110111000111;
+        // uint16_t typemask = 0b0010110111000111;
+        uint16_t typemask = 0b0010110111111000;
 
-        mavlink_msg_set_position_target_local_ned_pack(1, 1, &msg, ms, 1, 1, 8, typemask, x, y, z, vx, vy, vz, afx, afy, afz, yaw, yaw_rate);
+        mavlink_msg_set_position_target_local_ned_pack(1, 1, &msg, ms, 1, 1, 1, typemask, x, y, z, vx, vy, vz, afx, afy, afz, yaw, yaw_rate);
 
         size_t len = mavlink_msg_to_send_buffer(buffer, &msg);
 
@@ -322,36 +323,37 @@ void serialboost::SerialPort::sendoffboardcommands()
     uint32_t millis = 0;
     float vx = 0.0;
     float vy = 0.0;
+    float vz = 0.0;
 
     try{
         while(true){
 
-            if (count == 100){
-                vx = 1.0;
-                vy = 0.0;
-            }else if(count == 200){
-                vx = 0.0;
-                vy = 1.0;
-            }else if(count == 300){
-                vx = -1.0;
-                vy = 0.0;
-            }else if(count == 400){
-                vx =  0.0;
-                vy = -1.0;
-                count=0;
-            }else{}
+            // if (count == 100){
+            //     vx = 1.0;
+            //     vy = 0.0;
+            // }else if(count == 200){
+            //     vx = 0.0;
+            //     vy = 1.0;
+            // }else if(count == 300){
+            //     vx = -1.0;
+            //     vy = 0.0;
+            // }else if(count == 400){
+            //     vx =  0.0;
+            //     vy = -1.0;
+            //     count=0;
+            // }else{}
 
-            count++;
+            //count++;
 
             usleep(10000);
             _current = boost::posix_time::microsec_clock::local_time();
             boost::posix_time::time_duration timelapsed = _current - _started;
             millis = timelapsed.total_milliseconds();
 
-            WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.0, vx, vy, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-            if(count == 200){
-                std::cout <<  millis << std::endl;
-                }
+            WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.1, vx, vy, vz, 0.0, 0.0, 0.0, 0.0, 0.0);
+            // if(count == 200){
+            //     std::cout <<  millis << std::endl;
+            //     }
             }
         }
     catch (std::exception &e){
