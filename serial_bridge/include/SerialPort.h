@@ -16,8 +16,13 @@
 #include "common/mavlink.h"
 #include "mavlink_types.h"
 #include "zhelpers.hpp"
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+
 
 #define NELEMS(x)  (sizeof(x) / sizeof((x)[0]))
+#define BUFFER_LENGTH 2041
 
 namespace serialboost {
     typedef boost::tuple<
@@ -63,9 +68,9 @@ namespace serialboost {
 
         boost::system::error_code Flush();
 
-		zmq::context_t _context;
+		//zmq::context_t _context;
 
-		zmq::socket_t _publisher;
+		//zmq::socket_t _publisher;
 
 		zmq::context_t _contextsub; /*This has to be first else throws weird zmq_errort that bad address*/
 	
@@ -74,6 +79,8 @@ namespace serialboost {
         boost::posix_time::ptime _started;
 
         boost::posix_time::ptime _current;
+
+        mavlink_heartbeat_t hb;
 
 		//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
 		
@@ -133,6 +140,8 @@ namespace serialboost {
 		void testfunc();
 
         void sendoffboardcommands();
+
+        void udpqgc();
     };
 };
 

@@ -5,15 +5,16 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     const std::string &portName) : 
     _serialPort(ioService, portName), 
     _isOpen(false), 
-    _context(1), 
-    _publisher(_context, ZMQ_PUB), 
+    //_context(1), 
+    //_publisher(_context, ZMQ_PUB), 
     _contextsub(1), 
     _subscriber(_contextsub, ZMQ_SUB),
     _started(boost::posix_time::microsec_clock::local_time()),
-    _current(boost::posix_time::microsec_clock::local_time())/*buf("rollnew.txt")*/{
+    _current(boost::posix_time::microsec_clock::local_time())/*buf("rollnew.txt")*/
+    {
     _readBuffer.resize(128);
-	_publisher.bind("tcp://127.0.0.1:5563");
-}
+	//_publisher.bind("tcp://127.0.0.1:5563");
+    }
 
  
 boost::system::error_code serialboost::SerialPort::Flush() {
@@ -130,7 +131,7 @@ void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
 		mavlink_heartbeat_t hb;
  		mavlink_msg_heartbeat_decode(msg, &hb);
 
- 		std::cout << "Received Heartbeat Message" << std::endl;
+ 		std::cout << (unsigned)hb.custom_mode <<"Received Heartbeat Message" << std::endl;
  	}
 
 void serialboost::SerialPort::WriteToPixhawk(){
@@ -278,7 +279,7 @@ void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
 		float pitch = at.pitch;		
 		
 		snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
-		_publisher.send(message);
+		//_publisher.send(message);
  	}
 
 
@@ -361,3 +362,61 @@ void serialboost::SerialPort::sendoffboardcommands()
     }
 }
 
+void serialboost::SerialPort::udpqgc()
+{   
+    char target_ip[100];
+    
+    float position[6] = {};
+    int sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    struct sockaddr_in gcAddr; 
+    struct sockaddr_in locAddr;
+    //struct sockaddr_in fromAddr;
+    uint8_t buf[BUFFER_LENGTH];
+    ssize_t recsize;
+    socklen_t fromlen = sizeof(gcAddr);
+    int bytes_sent;
+    mavlink_message_t msg;
+    uint16_t len;
+    int i = 0;
+    //int success = 0;
+    unsigned int temp = 0;
+
+    strcpy(target_ip, "192.168.1.18");
+
+    memset(&locAddr, 0, sizeof(locAddr));
+    locAddr.sin_family = AF_INET;
+    locAddr.sin_addr.s_addr = INADDR_ANY;
+    locAddr.sin_port = htons(14551);
+
+    if (-1 == bind(sock,(struct sockaddr *)&locAddr, sizeof(struct sockaddr)))
+    {
+        perror("error bind failed");
+        close(sock);
+        exit(EXIT_FAILURE);
+    } 
+    
+    /* Attempt to make it non blocking */
+#if (defined __QNX__) | (defined __QNXNTO__)
+    if (fcntl(sock, F_SETFL, O_NONBLOCK | FASYNC) < 0)
+#else
+    if (fcntl(sock, F_SETFL, O_NONBLOCK | O_ASYNC) < 0)
+#endif
+
+    {
+        fprintf(stderr, "error setting nonblocking: %s\n", strerror(errno));
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+    
+    
+    memset(&gcAddr, 0, sizeof(gcAddr));
+    gcAddr.sin_family = AF_INET;
+    gcAddr.sin_addr.s_addr = inet_addr(target_ip);
+    gcAddr.sin_port = htons(14550);
+
+//     while(1){
+//         mavlink_msg_heartbeat_pack(1, 200, &_msgqgc, MAV_TYPE_HELICOPTER, MAV_AUTOPILOT_GENERIC, MAV_MODE_GUIDED_ARMED, 0, MAV_STATE_ACTIVE);
+//         len = mavlink_msg_to_send_buffer(buf, &msg);
+//         bytes_sent = sendto(sock, buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+//     }
+}
