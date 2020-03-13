@@ -9,16 +9,21 @@
 #include <boost/iostreams/stream.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <ostream>
-#include <sys/time.h>
 #include <boost/chrono.hpp>
 #include <boost/bind.hpp>
-#include "common/mavlink.h"
-#include "mavlink_types.h"
-#include "zhelpers.hpp"
+#include <ostream>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <time.h>
+#include "common/mavlink.h"
+#include "mavlink_types.h"
+#include "zhelpers.hpp"
+
 
 
 #define NELEMS(x)  (sizeof(x) / sizeof((x)[0]))
@@ -82,6 +87,20 @@ namespace serialboost {
 
         mavlink_heartbeat_t hb;
 
+        int _sock;
+
+        struct sockaddr_in gcAddr; 
+        
+        struct sockaddr_in locAddr;
+
+        uint8_t _buf[BUFFER_LENGTH];
+
+        char target_ip[50];
+
+        ssize_t _recsize;
+        
+        socklen_t fromlen = sizeof(gcAddr);
+
 		//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
 		
 		//boost::posix_time::ptime ended_;
@@ -113,6 +132,8 @@ namespace serialboost {
         void handle_message_mission_item_reached(mavlink_message_t *msg);
 
         void handle_message_mission_count(mavlink_message_t *msg);
+
+        void handle_message_status(mavlink_message_t *msg);
 		
 		//void testfunc();
 
@@ -141,7 +162,6 @@ namespace serialboost {
 
         void sendoffboardcommands();
 
-        void udpqgc();
     };
 };
 
