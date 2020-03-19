@@ -54,6 +54,8 @@ namespace serialboost {
         
         bool _isOpen;
 
+        bool _gcstodrone;
+
 		mavlink_message_t _msg;
 
 		mavlink_status_t _status;
@@ -150,7 +152,16 @@ namespace serialboost {
         void handle_message_id_mission_item_int(mavlink_message_t *msg);
 
         void handle_message_id_mission_ack(mavlink_message_t *msg);
+
+        void handle_message_mission_request_list(mavlink_message_t *msg);
+
+        void handle_message_set_current_mission_id(mavlink_message_t *msg);
 		
+        void handle_message_mission_current(mavlink_message_t *msg);
+
+        void handle_message_statustext(mavlink_message_t *msg);
+
+        void handle_message_mission_clear_all(mavlink_message_t *msg);
 		//void testfunc();
 
 
