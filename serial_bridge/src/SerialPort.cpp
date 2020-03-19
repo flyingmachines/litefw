@@ -117,18 +117,6 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
  		case MAVLINK_MSG_ID_ATTITUDE:
 			handle_message_attitude(msg);
 			break;
-
-        case MAVLINK_MSG_ID_MISSION_ITEM_REACHED:
-            handle_message_mission_item_reached(msg);
-            break;
-
-        case MAVLINK_MSG_ID_MISSION_COUNT:
-            handle_message_mission_count(msg);
-            break;
-
-        case MAVLINK_MSG_ID_MISSION_ITEM:
-            handle_message_mission_item(msg);
-            break;
         
         case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
         	handle_message_id_param_request_list(msg);
@@ -142,6 +130,34 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
         	handle_message_param_request_read(msg);
         	break;
 
+        case MAVLINK_MSG_ID_PARAM_SET:
+        	handle_message_param_set(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_MISSION_REQUEST_INT:
+        	handle_message_id_mission_request_int(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_MISSION_ITEM_INT:
+        	handle_message_id_mission_item_int(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_MISSION_ITEM_REACHED:
+            handle_message_mission_item_reached(msg);
+            break;
+
+        case MAVLINK_MSG_ID_MISSION_COUNT:
+            handle_message_mission_count(msg);
+            break;
+
+        case MAVLINK_MSG_ID_MISSION_ITEM:
+            handle_message_mission_item(msg);
+            break;
+
+        case MAVLINK_MSG_ID_MISSION_ACK:
+        	handle_message_id_mission_ack(msg);
+        	break;
+
 		//case MAVLINK_MSG_ID_LOCAL_POSITION_NED:
 		//	handle_message_lpos_ned(msg);
 		//	break;
@@ -153,6 +169,18 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 			break;
  		}
  	}
+void serialboost::SerialPort::handle_message_param_set(mavlink_message_t *msg)
+	{
+		uint8_t buffer[128];
+
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
+
+		std::vector<unsigned char> vec(buffer, buffer + len);
+
+		Write(&vec[0], vec.size());
+
+	}
+
 void serialboost::SerialPort::handle_message_param_request_read(mavlink_message_t *msg)
 	{		
 		uint8_t buffer[128];
@@ -185,6 +213,28 @@ void serialboost::SerialPort::handle_message_param_value(mavlink_message_t *msg)
 
 	}
 
+void serialboost::SerialPort::handle_message_id_mission_request_int(mavlink_message_t *msg)
+	{
+
+		memset(&_buf, 0, sizeof(_buf));
+		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+	
+	}
+
+void serialboost::SerialPort::handle_message_id_mission_item_int(mavlink_message_t *msg)
+	{
+
+		uint8_t buffer[128];
+		
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		
+		Write(&vec[0], vec.size());
+
+	}
+
 void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg)
     {
         mavlink_mission_item_t mission;
@@ -193,12 +243,24 @@ void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg
         std::cout << unsigned(mission.seq) << " "<< mission.x << " "<< mission.y << std::endl;
     }
 
+void serialboost::SerialPort::handle_message_id_mission_ack(mavlink_message_t *msg)
+	{
+
+		memset(&_buf, 0, sizeof(_buf));
+		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+
+	}
+
 void serialboost::SerialPort::handle_message_mission_count(mavlink_message_t *msg)
     {
-        mavlink_mission_count_t missioncount;
-        mavlink_msg_mission_count_decode(msg, &missioncount);
+		uint8_t buffer[128];
+		
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
 
-        //std::cout << unsigned(missioncount.count) << std::endl;
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		
+		Write(&vec[0], vec.size());
     }
 
 void serialboost::SerialPort::handle_message_mission_item_reached(mavlink_message_t *msg)
@@ -429,15 +491,13 @@ void serialboost::SerialPort::sendoffboardcommands()
         while(true){
 
             std::cout << "offboard mode" << std::endl;
-            usleep(100000);
             _current = boost::posix_time::microsec_clock::local_time();
             boost::posix_time::time_duration timelapsed = _current - _started;
             millis = timelapsed.total_milliseconds();
 
             WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.1, vx, vy, vz, 0.0, 0.0, 0.0, 0.0, 0.0);
-            // if(count == 200){
-            //     std::cout <<  millis << std::endl;
-            //     }
+            usleep(100000);
+
             }
         }
     catch (std::exception &e){

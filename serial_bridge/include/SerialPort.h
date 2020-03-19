@@ -142,6 +142,14 @@ namespace serialboost {
         void handle_message_param_request_read(mavlink_message_t *msg);
 
         void handle_message_param_value(mavlink_message_t *msg);
+
+        void handle_message_param_set(mavlink_message_t *msg);
+
+        void handle_message_id_mission_request_int(mavlink_message_t *msg);
+
+        void handle_message_id_mission_item_int(mavlink_message_t *msg);
+
+        void handle_message_id_mission_ack(mavlink_message_t *msg);
 		
 		//void testfunc();
 
