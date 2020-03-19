@@ -14,11 +14,15 @@ void serial_create::Create(boost::asio::io_service &ios) {
 
 			//boost::thread subthread(boost::bind(&serialboost::SerialPort::testfunc, _serialPort));	
 
-			boost::thread offboardsubthread(boost::bind(&serialboost::SerialPort::sendoffboardcommands, _serialPort));
+			//boost::thread offboardsubthread(boost::bind(&serialboost::SerialPort::sendoffboardcommands, _serialPort));
+
+            boost::thread recvudpqgcthread(boost::bind(&serialboost::SerialPort::recvudpqgc, _serialPort));
 				
 			//subthread.detach();	
 
-			offboardsubthread.detach();	
+			//offboardsubthread.detach();	
+
+            recvudpqgcthread.detach();
 
         } catch (const std::exception &e) {
 
@@ -34,6 +38,7 @@ void serial_create::Run(unsigned int numThreads){
     }
 
     boost::thread_group workerThreads;
+
 
     for (unsigned int i=0; i < ((numThreads == (unsigned int)-1) ? (boost::thread::hardware_concurrency()) : numThreads); ++i){
         workerThreads.create_thread(boost::bind(&serial_create::WorkerThread, this, boost::ref(_ioservice)));
@@ -86,8 +91,6 @@ int main(int argc, char *argv[]) {
             &portName)->required(), "port name (required)")
         ("baud,b", boost::program_options::value<int>(
             &baudRate)->required(), "baud rate (required)")
-        ("file,f", boost::program_options::value<std::string>(
-            &file), "file to save to")
         ;
     
     boost::program_options::variables_map vm;

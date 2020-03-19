@@ -42,7 +42,7 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
 		fprintf(stderr, "error setting nonblocking: %s\n", strerror(errno));
 		close(_sock);
 		exit(EXIT_FAILURE);
-    }
+ 	}
 
     memset(&gcAddr, 0, sizeof(gcAddr));
 	gcAddr.sin_family = AF_INET;
@@ -125,9 +125,22 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
         case MAVLINK_MSG_ID_MISSION_COUNT:
             handle_message_mission_count(msg);
             break;
+
         case MAVLINK_MSG_ID_MISSION_ITEM:
             handle_message_mission_item(msg);
             break;
+        
+        case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
+        	handle_message_id_param_request_list(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_PARAM_VALUE:
+        	handle_message_param_value(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
+        	handle_message_param_request_read(msg);
+        	break;
 
 		//case MAVLINK_MSG_ID_LOCAL_POSITION_NED:
 		//	handle_message_lpos_ned(msg);
@@ -140,6 +153,37 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 			break;
  		}
  	}
+void serialboost::SerialPort::handle_message_param_request_read(mavlink_message_t *msg)
+	{		
+		uint8_t buffer[128];
+
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
+
+		std::vector<unsigned char> vec(buffer, buffer + len);
+
+		Write(&vec[0], vec.size());
+
+	}
+
+void serialboost::SerialPort::handle_message_id_param_request_list(mavlink_message_t *msg)
+	{
+		uint8_t buffer[128];
+		
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		
+		Write(&vec[0], vec.size());
+	}
+
+void serialboost::SerialPort::handle_message_param_value(mavlink_message_t *msg)
+	{
+
+		memset(&_buf, 0, sizeof(_buf));
+		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+
+	}
 
 void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg)
     {
@@ -164,6 +208,7 @@ void serialboost::SerialPort::handle_message_mission_item_reached(mavlink_messag
 
         //std::cout << unsigned(missionreached.seq) << std::endl;
     }
+
 void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
  	{
 		
@@ -178,6 +223,22 @@ void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
 
  		std::cout << "Received Heartbeat Message" << std::endl;
  	}
+
+void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
+ 	{
+		
+		mavlink_attitude_t at;
+		mavlink_msg_attitude_decode(msg, &at);
+		
+		zmq::message_t message(20);
+		float roll = at.roll;
+		float yaw = at.yaw;
+		float pitch = at.pitch;		
+		
+		snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
+		//_publisher.send(message);
+ 	}
+
 void serialboost::SerialPort::handle_message_status(mavlink_message_t *msg)
 	{
 		// /mavlink_sys_status_t ss;
@@ -321,22 +382,6 @@ void serialboost::SerialPort::Write(const std::string &buffer) {
         buffer.size());
 }
 
-void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
- 	{
-		
-		mavlink_attitude_t at;
-		mavlink_msg_attitude_decode(msg, &at);
-		
-		zmq::message_t message(20);
-		float roll = at.roll;
-		float yaw = at.yaw;
-		float pitch = at.pitch;		
-		
-		snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
-		//_publisher.send(message);
- 	}
-
-
 void serialboost::SerialPort::testfunc()
 {
 	//boost::posix_time::seconds worktime(3);	
@@ -383,24 +428,8 @@ void serialboost::SerialPort::sendoffboardcommands()
     try{
         while(true){
 
-            // if (count == 100){
-            //     vx = 1.0;
-            //     vy = 0.0;
-            // }else if(count == 200){
-            //     vx = 0.0;
-            //     vy = 1.0;
-            // }else if(count == 300){
-            //     vx = -1.0;
-            //     vy = 0.0;
-            // }else if(count == 400){
-            //     vx =  0.0;
-            //     vy = -1.0;
-            //     count=0;
-            // }else{}
-
-            //count++;
-
-            usleep(10000);
+            std::cout << "offboard mode" << std::endl;
+            usleep(100000);
             _current = boost::posix_time::microsec_clock::local_time();
             boost::posix_time::time_duration timelapsed = _current - _started;
             millis = timelapsed.total_milliseconds();
@@ -414,4 +443,50 @@ void serialboost::SerialPort::sendoffboardcommands()
     catch (std::exception &e){
         std::cout << "Error occured " << std::endl;
     }
+}
+
+void serialboost::SerialPort::recvudpqgc()
+{
+    /*Receive Data From QGC's UDP Port*/
+    int recsize;
+    int nbytes;
+    mavlink_message_t msgqgc;
+    mavlink_status_t statusqgc;
+    
+    while(true){
+
+    	FD_ZERO(&rfs);
+    	FD_SET(_sock, &rfs);
+
+        memset(&_buf, 0, sizeof(_buf));
+
+        std::cout << "getting here" << std::endl;
+        recsize = select(_sock+1, &rfs, NULL, NULL, NULL);
+
+        if (recsize >= 1){
+
+        	nbytes = recvfrom(_sock, (void *)_buf, BUFFER_LENGTH, 0, (struct sockaddr *)&gcAddr, &_fromlen);
+            
+        	if(nbytes > 0){
+        		for (int k = 0; k < nbytes; k++)
+					{
+						if (mavlink_parse_char(MAVLINK_COMM_1, _buf[k], &msgqgc, &statusqgc))
+						{
+							handle_message(&msgqgc);
+						}
+					}
+        	}
+
+            std::cout << nbytes<<std::endl;
+        
+        }
+        
+        else {
+            
+            std::cout << "no data"<<std::endl;
+        
+        }
+
+    }
+
 }

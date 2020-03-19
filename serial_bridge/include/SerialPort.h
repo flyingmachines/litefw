@@ -99,7 +99,9 @@ namespace serialboost {
 
         ssize_t _recsize;
         
-        socklen_t fromlen = sizeof(gcAddr);
+        socklen_t _fromlen = sizeof(gcAddr);
+
+        fd_set rfs;
 
 		//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
 		
@@ -134,6 +136,12 @@ namespace serialboost {
         void handle_message_mission_count(mavlink_message_t *msg);
 
         void handle_message_status(mavlink_message_t *msg);
+
+        void handle_message_id_param_request_list(mavlink_message_t *msg);
+
+        void handle_message_param_request_read(mavlink_message_t *msg);
+
+        void handle_message_param_value(mavlink_message_t *msg);
 		
 		//void testfunc();
 
@@ -161,6 +169,8 @@ namespace serialboost {
 		void testfunc();
 
         void sendoffboardcommands();
+
+        void recvudpqgc();
 
     };
 };
