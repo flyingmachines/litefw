@@ -139,9 +139,17 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
         	handle_message_id_mission_request_int(msg);
         	break;
 
+        case MAVLINK_MSG_ID_MISSION_REQUEST:
+        	handle_message_mission_request(msg);
+        	break;
+
         case MAVLINK_MSG_ID_MISSION_ITEM_INT:
         	handle_message_id_mission_item_int(msg);
         	break;
+
+        case MAVLINK_MSG_ID_MISSION_ITEM:
+            handle_message_mission_item(msg);
+            break;
 
         case MAVLINK_MSG_ID_MISSION_ITEM_REACHED:
             handle_message_mission_item_reached(msg);
@@ -149,10 +157,6 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 
         case MAVLINK_MSG_ID_MISSION_COUNT:
             handle_message_mission_count(msg);
-            break;
-
-        case MAVLINK_MSG_ID_MISSION_ITEM:
-            handle_message_mission_item(msg);
             break;
 
         case MAVLINK_MSG_ID_MISSION_ACK:
@@ -250,6 +254,26 @@ void serialboost::SerialPort::handle_message_id_mission_request_int(mavlink_mess
 	
 	}
 
+void serialboost::SerialPort::handle_message_mission_request(mavlink_message_t *msg)
+	{
+
+		if(_gcstodrone){
+			/*When GCS to Drone is active mission request int goes from drone to gcs*/
+			memset(&_buf, 0, sizeof(_buf));
+			uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+			int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+		
+		}else{
+
+			uint8_t buffer[128];
+			size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+			std::vector<unsigned char> vec(buffer, buffer + len);
+			Write(&vec[0], vec.size());
+
+		}
+
+	}
+
 void serialboost::SerialPort::handle_message_id_mission_item_int(mavlink_message_t *msg)
 	{
 
@@ -271,10 +295,22 @@ void serialboost::SerialPort::handle_message_id_mission_item_int(mavlink_message
 
 void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg)
     {
-        	mavlink_mission_item_t mission;
-        	mavlink_msg_mission_item_decode(msg, &mission);
-        	std::cout << unsigned(mission.seq) << " "<< mission.x << " "<< mission.y << std::endl;
-    }
+
+    	if(_gcstodrone){
+			
+			uint8_t buffer[128];
+			size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+			std::vector<unsigned char> vec(buffer, buffer + len);
+			Write(&vec[0], vec.size());
+		
+		}else{
+			
+			memset(&_buf, 0, sizeof(_buf));
+			uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+			int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+
+		}
+	}
 
 void serialboost::SerialPort::handle_message_id_mission_ack(mavlink_message_t *msg)
 	{
@@ -377,16 +413,18 @@ void serialboost::SerialPort::handle_message_mission_clear_all(mavlink_message_t
 void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
  	{
 		
-	 		
-		mavlink_heartbeat_t hb;
- 		mavlink_msg_heartbeat_decode(msg, &hb);
+	 	if((unsigned)msg->sysid != 255){
+			
+			mavlink_heartbeat_t hb;
+ 			mavlink_msg_heartbeat_decode(msg, &hb);
 
- 		/*Sending data to QGC*/
-		memset(&_buf, 0, sizeof(_buf));
-		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+ 			/*Sending data to QGC*/
+			memset(&_buf, 0, sizeof(_buf));
+			uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+			int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
 
- 		std::cout << "Received Heartbeat Message" << std::endl;
+ 			std::cout << "Received Heartbeat Message" << (unsigned)msg->sysid << std::endl;
+ 		}
  	}
 
 void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
@@ -623,7 +661,7 @@ void serialboost::SerialPort::recvudpqgc()
 
         memset(&_buf, 0, sizeof(_buf));
 
-        std::cout << "getting here" << std::endl;
+        //std::cout << "getting here" << std::endl;
         recsize = select(_sock+1, &rfs, NULL, NULL, NULL);
 
         if (recsize >= 1){
@@ -635,8 +673,12 @@ void serialboost::SerialPort::recvudpqgc()
 					{
 						if (mavlink_parse_char(MAVLINK_COMM_1, _buf[k], &msgqgc, &statusqgc))
 						{
+
+							//std::cout << (unsigned)msgqgc.sysid << " " << (unsigned)msgqgc.compid << " " << std::endl;
+
 							if(msgqgc.msgid == MAVLINK_MSG_ID_MISSION_COUNT){
 
+								std::cout << "upload mission count" << std::endl;
 								_gcstodrone = true;
 							
 							}
@@ -646,7 +688,7 @@ void serialboost::SerialPort::recvudpqgc()
 					}
         	}
 
-            std::cout << nbytes<<std::endl;
+        //    std::cout << nbytes<<std::endl;
         
         }
         
