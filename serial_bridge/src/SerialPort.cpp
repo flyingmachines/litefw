@@ -278,7 +278,7 @@ void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
 		float pitch = at.pitch;		
 		
 		snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
-		_publisher.send(message);
+		//_publisher.send(message);
  	}
 
 
