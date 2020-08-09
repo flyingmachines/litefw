@@ -106,6 +106,8 @@ namespace serialboost {
         void handle_message_mission_item_reached(mavlink_message_t *msg);
 
         void handle_message_mission_count(mavlink_message_t *msg);
+
+        void handle_message_lpos_ned(mavlink_message_t *msg);
 		
 		//void testfunc();
 

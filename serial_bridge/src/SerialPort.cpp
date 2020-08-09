@@ -88,9 +88,9 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
             handle_message_mission_item(msg);
             break;
 
-		//case MAVLINK_MSG_ID_LOCAL_POSITION_NED:
-		//	handle_message_lpos_ned(msg);
-		//	break;
+		case MAVLINK_MSG_ID_LOCAL_POSITION_NED:
+			handle_message_lpos_ned(msg);
+			break;
 
 		//case MAVLINK_MSG_ID_POSITION_TARGET_LOCAL_NED:
 		//	handle_message_lpos_ned_target(msg);
@@ -99,6 +99,14 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 			break;
  		}
  	}
+
+void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
+	{
+		mavlink_local_position_ned_t lpos;
+		mavlink_msg_local_position_ned_decode(msg, &lpos);
+
+		
+	}
 
 void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg)
     {
