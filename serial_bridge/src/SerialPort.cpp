@@ -1,17 +1,32 @@
 #include "SerialPort.h"
+#include <math.h>
 
 
 serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService, 
     const std::string &portName) : 
     _serialPort(ioService, portName), 
     _isOpen(false), 
+    _zned(0.0),
+    _vzned(0.0),
+    _vsum(0.0),
+    _uz(0.0),
+    _ux(0.0),
+    _uy(0.0),
+    _uzscale(0.0),
+    _uxscale(0.0),
+    _uyscale(0.0),
+    _offb(false),
+    _cnt(0),
+    _cntsub(0),
     _context(1), 
     _publisher(_context, ZMQ_PUB), 
     _contextsub(1), 
     _subscriber(_contextsub, ZMQ_SUB),
     _started(boost::posix_time::microsec_clock::local_time()),
-    _current(boost::posix_time::microsec_clock::local_time())/*buf("rollnew.txt")*/{
-    _readBuffer.resize(128);
+    _current(boost::posix_time::microsec_clock::local_time()),
+    _current1(boost::posix_time::microsec_clock::local_time()),
+    _previous(boost::posix_time::microsec_clock::local_time())/*buf("rollnew.txt")*/{
+    _readBuffer.resize(256);
 	_publisher.bind("tcp://127.0.0.1:5563");
 }
 
@@ -57,6 +72,7 @@ void serialboost::SerialPort::ReadComplete(
 			}
 		}
         
+        //Flush();
 		ReadBegin();  // queue another read
     
 	} else {
@@ -104,8 +120,76 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
 	{
 		mavlink_local_position_ned_t lpos;
 		mavlink_msg_local_position_ned_decode(msg, &lpos);
+		_zned = lpos.z;
+		_vzned = lpos.vz;
 
-		
+        //std::cout << lpos.z << std::endl;
+
+		//---Simple P-PID Controller----//
+ 
+		float ez = -2.0 - _zned;
+		float evz = 0.0 - _vzned;
+		_uz = -1.0*ez - 0.5*evz + 9.81;
+        // _uz = 9.81 - 1.5*(1.5*ez - _vzned);
+        //_uz = 9.81 - 2.0*tanh(4*(evz + ez));
+        
+        _uzscale = (0.5 * _uz)/9.81;
+
+        //float ey = 1.0 - lpos.y;
+        //float evy = 0 - lpos.vy;
+        //float sy = evy + 5.0*ey;
+        //float epsy = 1.0f;
+        //float etay = 5.0f;
+        //float satcompy;
+
+        //  if(fabsf(sy) <= epsy){
+        //     satcompy = sy/epsy;
+        // }else if(sy > epsy){
+        //     satcompy = 1.0f;
+        // }else{
+        //     satcompy = -1.0f;
+        // }
+
+        // _uy = etay*(satcompy);
+        // _uyscale = (0.5 * _uy)/9.81;
+
+        //std::cout << _uzscale << std::endl;
+
+        // float ex = 1.0 - lpos.x;
+        // float evx = 0 - lpos.vx;
+        // float s = evx + 1*ex;
+
+
+
+        // _ux = 1*tanh(2*(s));
+        // _uy = 1*tanh(2*(sy));
+
+        //_uxscale = (0.5 * _ux)/9.81;
+        //_uyscale = (0.5 * _uy)/9.81;
+
+        // if(_cnt == 30){
+        //     std::cout << "ctrl " << " " << _uy << std::endl;
+        //     _cnt = 0;
+        // }
+        // _cnt++;
+
+
+        zmq::message_t message(30);
+        float xn = lpos.x;
+        float vxn = lpos.vx;
+        float yn = lpos.y;
+        float vyn = lpos.vy;
+        
+        if(_offb){
+            if(_cnt == 30){
+                std::cout << "Publishing data" << " " << vyn << std::endl;
+                _cnt = 0;
+            }
+            _cnt++;
+            snprintf((char *)message.data(), 30, "%0.3f %0.3f %0.3f %0.3f", xn, vxn, yn, vyn);
+            _publisher.send(message);
+        }   
+
 	}
 
 void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg)
@@ -138,7 +222,20 @@ void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
 		mavlink_heartbeat_t hb;
  		mavlink_msg_heartbeat_decode(msg, &hb);
 
- 		std::cout << "Received Heartbeat Message" << std::endl;
+ 		_current1 = boost::posix_time::microsec_clock::local_time();
+        boost::posix_time::time_duration timelapsed = _current1 - _previous;
+        uint32_t millis = timelapsed.total_milliseconds();
+
+        if (unsigned(hb.custom_mode) == 393216)
+        {
+            _offb = true;
+            //std::cout << "offboard" << std::endl;
+        }else{
+            _offb = false;
+        }
+
+ 		std::cout << "Received Heartbeat Message" << " " << millis << " " << unsigned(hb.base_mode) << unsigned(hb.custom_mode) << " " << unsigned(_offb) << std::endl;
+ 		_previous = _current1;
  	}
 
 void serialboost::SerialPort::WriteToPixhawk(){
@@ -160,8 +257,9 @@ void serialboost::SerialPort::WriteToPixhawkOffboardSetpoint(uint32_t ms, float 
         mavlink_message_t msg;
         uint8_t buffer[128];
         // uint16_t typemask = 0b0010110111000111;
-        uint16_t typemask = 0b0010110111111000;
-
+        //uint16_t typemask = 0b0010110111111000;
+		uint16_t typemask = 0b0000110000111111;
+        
         mavlink_msg_set_position_target_local_ned_pack(1, 1, &msg, ms, 1, 1, 1, typemask, x, y, z, vx, vy, vz, afx, afy, afz, yaw, yaw_rate);
 
         size_t len = mavlink_msg_to_send_buffer(buffer, &msg);
@@ -277,16 +375,8 @@ void serialboost::SerialPort::Write(const std::string &buffer) {
 void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
  	{
 		
-		mavlink_attitude_t at;
-		mavlink_msg_attitude_decode(msg, &at);
-		
-		zmq::message_t message(20);
-		float roll = at.roll;
-		float yaw = at.yaw;
-		float pitch = at.pitch;		
-		
-		snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
-		//_publisher.send(message);
+		//mavlink_attitude_t at;
+		//mavlink_msg_attitude_decode(msg, &at);
  	}
 
 
@@ -297,6 +387,7 @@ void serialboost::SerialPort::testfunc()
 
 	_subscriber.connect("tcp://127.0.0.1:5556");
 	_subscriber.setsockopt( ZMQ_SUBSCRIBE, "", 0);
+    uint32_t millis = 0;
 	
 	//std::cout << "priinting some" << std::endl;	
 
@@ -308,13 +399,26 @@ void serialboost::SerialPort::testfunc()
 
 		_subscriber.recv(&update);
 
-		int zipcode, temperature, relhumidity;
+		float uxs, uys;
 		std::istringstream iss(static_cast<char *>(update.data()));
-		iss >> zipcode >> temperature >> relhumidity;
+		iss >> uxs >> uys;
 
-		std::cout << "ZTR" << zipcode << " " << temperature << " " << relhumidity << " " << std::endl;
-	
-		WriteToPixhawk();
+        _current = boost::posix_time::microsec_clock::local_time();
+        boost::posix_time::time_duration timelapsed = _current - _started;
+        millis = timelapsed.total_milliseconds();
+
+        if(_cntsub == 30){
+            std::cout << "Publishing ctrl " << uxs << std::endl;
+            _cntsub = 0;
+        }
+
+        _cntsub++;
+
+        _uxscale = uxs;
+        _uyscale = uys;
+        
+        //WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ux, 0.0, _uz, 0.0, 0.0);
+		//WriteToPixhawk();
 
 			}
 		}
@@ -332,33 +436,32 @@ void serialboost::SerialPort::sendoffboardcommands()
     float vx = 0.0;
     float vy = 0.0;
     float vz = 0.0;
+    bool flag = false;
 
     try{
         while(true){
-
-            // if (count == 100){
-            //     vx = 1.0;
-            //     vy = 0.0;
-            // }else if(count == 200){
-            //     vx = 0.0;
-            //     vy = 1.0;
-            // }else if(count == 300){
-            //     vx = -1.0;
-            //     vy = 0.0;
-            // }else if(count == 400){
-            //     vx =  0.0;
-            //     vy = -1.0;
-            //     count=0;
-            // }else{}
-
-            //count++;
 
             usleep(10000);
             _current = boost::posix_time::microsec_clock::local_time();
             boost::posix_time::time_duration timelapsed = _current - _started;
             millis = timelapsed.total_milliseconds();
 
-            WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.1, vx, vy, vz, 0.0, 0.0, 0.0, 0.0, 0.0);
+            if (_offb && !flag)
+            {
+                count++;
+            }
+
+            //std::cout << "getting" << std::endl;
+            if(_offb && count < 400 && !flag){
+                
+                WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, _uxscale, _uyscale, -_uzscale, 0.0, 0.0);
+            }else if(_offb && count > 400){
+                WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, _uxscale, _uyscale, -_uzscale, 0.0, 0.0);
+                flag = true;
+
+            }else{
+               WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, -_uzscale, 0.0, 0.0); 
+            }
             // if(count == 200){
             //     std::cout <<  millis << std::endl;
             //     }

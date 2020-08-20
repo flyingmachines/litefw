@@ -44,6 +44,30 @@ namespace serialboost {
         
         bool _isOpen;
 
+        float _zned;
+
+        float _vzned;
+
+        float _vsum;
+
+        float _uz;
+
+        float _ux;
+
+        float _uy;
+
+        float _uzscale;
+
+        float _uxscale;
+
+        float _uyscale;
+
+        bool _offb;
+
+        int _cnt;
+
+        int _cntsub;
+
 		mavlink_message_t _msg;
 
 		mavlink_status_t _status;
@@ -74,6 +98,10 @@ namespace serialboost {
         boost::posix_time::ptime _started;
 
         boost::posix_time::ptime _current;
+
+        boost::posix_time::ptime _current1;
+
+        boost::posix_time::ptime _previous;
 
 		//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
 		
