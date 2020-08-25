@@ -4,7 +4,7 @@ int main () {
     //  Prepare our context and subscriber
     zmq::context_t context(1);
     zmq::socket_t subscriber (context, ZMQ_SUB);
-    subscriber.connect("tcp://127.0.0.1:5563");
+    subscriber.connect("tcp://127.0.0.1:6000");
     subscriber.setsockopt( ZMQ_SUBSCRIBE, "", 0);
 
     while (1) {
@@ -18,12 +18,12 @@ int main () {
 
 		subscriber.recv(&update);
 		
-		float roll, yaw, pitch;
+		float bb_center_x, bb_center_y;
 		std::istringstream iss(static_cast<char *>(update.data()));
-		iss >> roll >> yaw >> pitch;
+		iss >> bb_center_x >> bb_center_y;
 		//float roll = ::atof(contents.c_str());
 		
-		std::cout << "RPY" << roll << " " << yaw << " " << pitch << " " << std::endl;	
+		std::cout << "Center X: " << bb_center_x << ", " << "Center Y: " << bb_center_y << std::endl;	
        // std::cout << "[" << address << "] " << roll << std::endl;
     }
     return 0;

@@ -11,6 +11,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <ostream>
 #include <sys/time.h>
+#include <math.h>
 #include <boost/chrono.hpp>
 #include <boost/bind.hpp>
 #include "common/mavlink.h"
@@ -18,6 +19,11 @@
 #include "zhelpers.hpp"
 
 #define NELEMS(x)  (sizeof(x) / sizeof((x)[0]))
+#define principalx 487.67
+#define principaly 486.75
+#define u0 312.25
+#define v0 237.23
+#define kdu 0.467
 
 namespace serialboost {
     typedef boost::tuple<
@@ -44,9 +50,27 @@ namespace serialboost {
         
         bool _isOpen;
 
+        bool _initz;
+
+        bool _offb;
+
+        bool _visrecv;
+
         float _zned;
 
         float _vzned;
+
+        float _xned;
+
+        float _yned;
+
+        float _xobjned;
+
+        float _yobjned;
+
+        float _vertd;
+
+        float _zsp;
 
         float _vsum;
 
@@ -56,13 +80,17 @@ namespace serialboost {
 
         float _uy;
 
+        float _phi;
+
+        float _theta;
+
+        float _psi;
+
         float _uzscale;
 
         float _uxscale;
 
         float _uyscale;
-
-        bool _offb;
 
         int _cnt;
 
@@ -94,6 +122,10 @@ namespace serialboost {
 		zmq::context_t _contextsub; /*This has to be first else throws weird zmq_errort that bad address*/
 	
 		zmq::socket_t _subscriber;
+
+        zmq::context_t _ctxtvis;
+
+        zmq::socket_t _subscribevis;
 
         boost::posix_time::ptime _started;
 
@@ -136,6 +168,8 @@ namespace serialboost {
         void handle_message_mission_count(mavlink_message_t *msg);
 
         void handle_message_lpos_ned(mavlink_message_t *msg);
+
+        void handle_message_lidar(mavlink_message_t *msg);
 		
 		//void testfunc();
 
@@ -163,6 +197,8 @@ namespace serialboost {
 		void testfunc();
 
         void sendoffboardcommands();
+
+        void receivevision();
     };
 };
 

@@ -15,10 +15,14 @@ void serial_create::Create(boost::asio::io_service &ios) {
 			boost::thread subthread(boost::bind(&serialboost::SerialPort::testfunc, _serialPort));	
 
 			boost::thread offboardthread(boost::bind(&serialboost::SerialPort::sendoffboardcommands, _serialPort));
+
+            boost::thread visionthread(boost::bind(&serialboost::SerialPort::receivevision, _serialPort));
 				
 			subthread.detach();	
 
 			offboardthread.detach();		
+
+            visionthread.detach();
 
         } catch (const std::exception &e) {
 

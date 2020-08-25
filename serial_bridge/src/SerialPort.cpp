@@ -6,22 +6,35 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     const std::string &portName) : 
     _serialPort(ioService, portName), 
     _isOpen(false), 
+    _initz(false),
+    _offb(false),
+    _visrecv(false),
     _zned(0.0),
     _vzned(0.0),
+    _xned(0.0),
+    _yned(0.0),
+    _xobjned(0.0),
+    _yobjned(0.0),
+    _vertd(0.0),
+    _zsp(0.0),
     _vsum(0.0),
     _uz(0.0),
     _ux(0.0),
     _uy(0.0),
+    _phi(0.0),
+    _theta(0.0),
+    _psi(0.0),
     _uzscale(0.0),
     _uxscale(0.0),
     _uyscale(0.0),
-    _offb(false),
     _cnt(0),
     _cntsub(0),
     _context(1), 
     _publisher(_context, ZMQ_PUB), 
     _contextsub(1), 
     _subscriber(_contextsub, ZMQ_SUB),
+    _ctxtvis(1),
+    _subscribevis(_ctxtvis, ZMQ_SUB),
     _started(boost::posix_time::microsec_clock::local_time()),
     _current(boost::posix_time::microsec_clock::local_time()),
     _current1(boost::posix_time::microsec_clock::local_time()),
@@ -108,6 +121,10 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 			handle_message_lpos_ned(msg);
 			break;
 
+        case MAVLINK_MSG_ID_DISTANCE_SENSOR:
+            handle_message_lidar(msg);
+            break;
+
 		//case MAVLINK_MSG_ID_POSITION_TARGET_LOCAL_NED:
 		//	handle_message_lpos_ned_target(msg);
 		//  break;
@@ -116,6 +133,17 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
  		}
  	}
 
+void serialboost::SerialPort::handle_message_lidar(mavlink_message_t *msg)
+    {
+        mavlink_distance_sensor_t dst;
+        mavlink_msg_distance_sensor_decode(msg, &dst);
+
+        float lidard = dst.current_distance * 0.01f;
+
+        //std::cout << "lidard" << lidard << std::endl;
+        _vertd = fabsf(lidard) * cos(_theta) * cos(_phi);
+
+    }
 void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
 	{
 		mavlink_local_position_ned_t lpos;
@@ -123,17 +151,32 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
 		_zned = lpos.z;
 		_vzned = lpos.vz;
 
+        //LPOSZ STATE MACHINE
+        if(_offb && !_initz){
+
+            _zsp = _zned;
+            _initz = true;
+
+        }else if(_offb && _initz){
+
+            _initz = true;
+
+        }else{
+
+            _initz = false;
+        }
+
         //std::cout << lpos.z << std::endl;
 
 		//---Simple P-PID Controller----//
  
-		float ez = -2.0 - _zned;
+		float ez = _zsp - _zned;
 		float evz = 0.0 - _vzned;
-		_uz = -1.0*ez - 0.5*evz + 9.81;
+		_uz = -2.5*ez - 2.5*evz + 9.81;
         // _uz = 9.81 - 1.5*(1.5*ez - _vzned);
-        //_uz = 9.81 - 2.0*tanh(4*(evz + ez));
+        //_uz = 9.81 - 1.0*tanh(4*(evz + ez));
         
-        _uzscale = (0.5 * _uz)/9.81;
+        _uzscale = (0.6 * _uz)/9.81;
 
         //float ey = 1.0 - lpos.y;
         //float evy = 0 - lpos.vy;
@@ -174,19 +217,22 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
         // _cnt++;
 
 
-        zmq::message_t message(30);
+        zmq::message_t message(50);
         float xn = lpos.x;
         float vxn = lpos.vx;
         float yn = lpos.y;
         float vyn = lpos.vy;
+        _xned = xn;
+        _yned = yn;
         
-        if(_offb){
+        if(_offb && _visrecv){
             if(_cnt == 30){
+		        std::cout << lpos.x << " " << lpos.y << std::endl;
                 std::cout << "Publishing data" << " " << vyn << std::endl;
                 _cnt = 0;
             }
             _cnt++;
-            snprintf((char *)message.data(), 30, "%0.3f %0.3f %0.3f %0.3f", xn, vxn, yn, vyn);
+            snprintf((char *)message.data(), 50, "%0.3f %0.3f %0.3f %0.3f %0.3f %0.3f", xn, vxn, yn, vyn, _xobjned, _yobjned);
             _publisher.send(message);
         }   
 
@@ -375,8 +421,14 @@ void serialboost::SerialPort::Write(const std::string &buffer) {
 void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
  	{
 		
-		//mavlink_attitude_t at;
-		//mavlink_msg_attitude_decode(msg, &at);
+		mavlink_attitude_t at;
+		mavlink_msg_attitude_decode(msg, &at);
+
+        _phi = at.roll;
+        _theta = at.pitch;
+        _psi = at.yaw;
+
+        //std::cout << "Roll is " << at.roll << std::endl;
  	}
 
 
@@ -427,6 +479,68 @@ void serialboost::SerialPort::testfunc()
 	 	std::cout << "Error occurred " << std::endl;
 	 }		
 	
+}
+
+void serialboost::SerialPort::receivevision()
+{
+    _subscribevis.connect("tcp://127.0.0.1:6000");
+    _subscribevis.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+
+    //std::cout << "gettin here " << std::endl;
+
+    try{
+        while(true){
+
+            //std::cout << "gettin here loop" << std::endl;
+
+            zmq::message_t update;
+
+            _subscribevis.recv(&update);
+
+            _visrecv = true;
+
+            float ucam, vcam;
+            float xnorm, ynorm, r2;
+            float xnew, ynew;
+            float beta;
+            float xvirtual, yvirtual;
+            std::istringstream iss(static_cast<char *>(update.data()));
+            iss >> ucam >> vcam;
+
+            //std::cout << "u,v are " << ucam << "," << vcam << std::endl;
+            //-------------Convert from pixels to meters------------//
+            r2 = pow((ucam-u0)/principalx, 2) + pow((vcam-v0)/principaly, 2);
+
+            //std::cout << "r2 is " << r2 <<" " << u0 << " " << v0 << " " << kdu << " " << principalx << " " << principaly << std::endl;
+
+            xnorm = (ucam - u0)*(1.0 + kdu*r2)/principalx;
+            ynorm = (vcam - v0)*(1.0 + kdu*r2)/principaly;
+
+            xnew = -ynorm;
+            ynew = xnorm;
+
+            // theta is pitch, phi is roll
+            beta = 1.0f / (sin(_theta)*xnew + cos(_theta)*sin(_phi)*ynew + cos(_theta)*cos(_phi));
+
+            xvirtual = beta * (cos(_theta) * xnew + sin(_theta) * sin(_phi) * ynew + sin(_theta) * cos(_phi)) + 0.1f;
+            yvirtual = beta * (cos(_phi) * ynew - sin(_phi));
+
+            xvirtual = _vertd * xvirtual;
+            yvirtual = _vertd * yvirtual;
+
+            _xobjned = _xned + cos(_psi) * xvirtual - sin(_psi) * yvirtual;
+            _yobjned = _yned + sin(_psi) * xvirtual + cos(_psi) * yvirtual;
+
+            //std::cout << "x,y are " << _xobjned << "," << _yobjned << std::endl;
+
+
+        }
+
+    }
+    catch (std::exception &e) {
+
+        std::cout << "Error occurred" << std::endl;
+    }
 }
 
 void serialboost::SerialPort::sendoffboardcommands()
