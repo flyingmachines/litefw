@@ -68,6 +68,10 @@ namespace serialboost {
 
         float _yobjned;
 
+        float _xobjnedprev;
+
+        float _yobjnedprev;
+
         float _vertd;
 
         float _zsp;
@@ -92,6 +96,16 @@ namespace serialboost {
 
         float _uyscale;
 
+        float _lidarprev;
+
+        float _xobjvel;
+
+        float _yobjvel;
+
+        float _xobjvelprev;
+
+        float _yobjvelprev;
+
         int _cnt;
 
         int _cntsub;
@@ -112,6 +126,8 @@ namespace serialboost {
         std::vector<unsigned char> _writeQueue, _writeBuffer;
         
         boost::mutex _writeQueueMutex, _writeBufferMutex;
+
+        boost::shared_mutex _sendMpcMutex;
 
         boost::system::error_code Flush();
 

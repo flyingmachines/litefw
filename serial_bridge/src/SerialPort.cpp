@@ -15,6 +15,8 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     _yned(0.0),
     _xobjned(0.0),
     _yobjned(0.0),
+    _xobjnedprev(0.0),
+    _yobjnedprev(0.0),
     _vertd(0.0),
     _zsp(0.0),
     _vsum(0.0),
@@ -27,6 +29,9 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     _uzscale(0.0),
     _uxscale(0.0),
     _uyscale(0.0),
+    _lidarprev(0.0),
+    _xobjvel(0.0),
+    _yobjvel(0.0),
     _cnt(0),
     _cntsub(0),
     _context(1), 
@@ -139,6 +144,23 @@ void serialboost::SerialPort::handle_message_lidar(mavlink_message_t *msg)
         mavlink_msg_distance_sensor_decode(msg, &dst);
 
         float lidard = dst.current_distance * 0.01f;
+        float err = fabsf(lidard - _lidarprev);
+        _lidarprev = lidard;
+
+        if (err > 0.6f)
+        {
+            lidard = _lidarprev;
+            /* code */
+        }
+
+        if (lidard < 0.5f)
+        {
+            lidard = 0.5f;
+            /* code */
+        }else if(lidard > 2.0f){
+
+            lidard = 2.0f;
+        }
 
         //std::cout << "lidard" << lidard << std::endl;
         _vertd = fabsf(lidard) * cos(_theta) * cos(_phi);
@@ -152,18 +174,18 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
 		_vzned = lpos.vz;
 
         //LPOSZ STATE MACHINE
-        if(_offb && !_initz){
+        if(!_offb){
 
             _zsp = _zned;
-            _initz = true;
+            _initz = false;
 
-        }else if(_offb && _initz){
+        }else if(_offb && !_initz){
 
             _initz = true;
 
         }else{
 
-            _initz = false;
+            _initz = true;
         }
 
         //std::cout << lpos.z << std::endl;
@@ -172,8 +194,10 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
  
 		float ez = _zsp - _zned;
 		float evz = 0.0 - _vzned;
-		_uz = -2.5*ez - 2.5*evz + 9.81;
-        // _uz = 9.81 - 1.5*(1.5*ez - _vzned);
+		
+       //_uz = -2.0*ez - 2.0*evz + 9.81;
+        
+        _uz = 9.81 - 1.5*(0.25 - _vzned);
         //_uz = 9.81 - 1.0*tanh(4*(evz + ez));
         
         _uzscale = (0.6 * _uz)/9.81;
@@ -217,7 +241,7 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
         // _cnt++;
 
 
-        zmq::message_t message(50);
+        zmq::message_t message(100);
         float xn = lpos.x;
         float vxn = lpos.vx;
         float yn = lpos.y;
@@ -226,13 +250,16 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
         _yned = yn;
         
         if(_offb && _visrecv){
+            
+            boost::shared_lock<boost::shared_mutex> lock(_sendMpcMutex);
+
             if(_cnt == 30){
 		        std::cout << lpos.x << " " << lpos.y << std::endl;
                 std::cout << "Publishing data" << " " << vyn << std::endl;
                 _cnt = 0;
             }
             _cnt++;
-            snprintf((char *)message.data(), 50, "%0.3f %0.3f %0.3f %0.3f %0.3f %0.3f", xn, vxn, yn, vyn, _xobjned, _yobjned);
+            snprintf((char *)message.data(), 100, "%0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f", xn, vxn, yn, vyn, _xobjned, _yobjned, _xobjvel, _yobjvel, _vertd);
             _publisher.send(message);
         }   
 
@@ -491,6 +518,8 @@ void serialboost::SerialPort::receivevision()
     try{
         while(true){
 
+            boost::lock_guard<boost::shared_mutex> lock(_sendMpcMutex);
+
             //std::cout << "gettin here loop" << std::endl;
 
             zmq::message_t update;
@@ -531,6 +560,47 @@ void serialboost::SerialPort::receivevision()
             _xobjned = _xned + cos(_psi) * xvirtual - sin(_psi) * yvirtual;
             _yobjned = _yned + sin(_psi) * xvirtual + cos(_psi) * yvirtual;
 
+            _xobjvel = (_xobjned - _xobjnedprev)/0.016;
+            _yobjvel = (_yobjned - _yobjnedprev)/0.016;
+
+            _xobjnedprev = _xobjned;
+            _yobjnedprev = _yobjned;
+
+            if (fabsf(_xobjvel -_xobjvelprev) > 0.4)
+            {
+                _xobjvel = _xobjvelprev;
+                
+            }
+
+            if (fabsf(_yobjvel -_yobjvelprev) > 0.4)
+            {
+                _yobjvel = _yobjvelprev;
+                
+            }
+
+
+            
+            //------------------------------------------//
+            if (_xobjvel > 2.0f)
+            {
+                _xobjvel = 2.0f;
+            
+            }else if (_xobjvel < -2.0f){
+
+                _xobjvel = -2.0f;
+            }else{}
+
+            if (_yobjvel > 2.0f)
+            {
+                _yobjvel = 2.0f;
+            
+            }else if (_yobjvel < -2.0f){
+
+                _yobjvel = -2.0f;
+            }else{}
+
+            _xobjvelprev = _xobjvel;
+            _yobjvelprev = _yobjvel;
             //std::cout << "x,y are " << _xobjned << "," << _yobjned << std::endl;
 
 
