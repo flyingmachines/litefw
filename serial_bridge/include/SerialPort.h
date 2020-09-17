@@ -56,6 +56,12 @@ namespace serialboost {
 
         bool _visrecv;
 
+        bool _timeinit;
+
+        bool _within0_5;
+
+        bool _stopmotors;
+
         float _zned;
 
         float _vzned;
@@ -67,10 +73,6 @@ namespace serialboost {
         float _xobjned;
 
         float _yobjned;
-
-        float _xobjnedprev;
-
-        float _yobjnedprev;
 
         float _vertd;
 
@@ -98,17 +100,35 @@ namespace serialboost {
 
         float _lidarprev;
 
-        float _xobjvel;
+        float _xd;
 
-        float _yobjvel;
+        float _yd;
 
-        float _xobjvelprev;
+        float _xd1;
 
-        float _yobjvelprev;
+        float _yd1;
+
+        float _xd2;
+
+        float _yd2;
+
+        float _xdf;
+
+        float _xdf1;
+
+        float _xdf2;
+
+        float _ydf;
+
+        float _ydf1;
+
+        float _ydf2;
 
         int _cnt;
 
         int _cntsub;
+
+        int _cntldr;
 
 		mavlink_message_t _msg;
 
@@ -119,6 +139,7 @@ namespace serialboost {
         boost::mutex _errorCodeMutex;
         
         std::vector<unsigned char> _readBuffer;
+        std::vector<int> _landBuffer;
         
         boost::function<void (boost::asio::io_service &, 
             const std::vector<unsigned char> &, size_t)> _onRead;
@@ -150,6 +171,12 @@ namespace serialboost {
         boost::posix_time::ptime _current1;
 
         boost::posix_time::ptime _previous;
+
+        boost::posix_time::ptime _offbrecv;
+
+        boost::posix_time::ptime _offbrecvcurr;
+
+        boost::posix_time::ptime _visionupdate;
 
 		//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
 		

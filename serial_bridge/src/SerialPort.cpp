@@ -9,14 +9,15 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     _initz(false),
     _offb(false),
     _visrecv(false),
+    _timeinit(false),
+    _within0_5(false),
+    _stopmotors(false),
     _zned(0.0),
     _vzned(0.0),
     _xned(0.0),
     _yned(0.0),
     _xobjned(0.0),
     _yobjned(0.0),
-    _xobjnedprev(0.0),
-    _yobjnedprev(0.0),
     _vertd(0.0),
     _zsp(0.0),
     _vsum(0.0),
@@ -26,14 +27,25 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     _phi(0.0),
     _theta(0.0),
     _psi(0.0),
-    _uzscale(0.0),
+    _uzscale(0.6),
     _uxscale(0.0),
     _uyscale(0.0),
     _lidarprev(0.0),
-    _xobjvel(0.0),
-    _yobjvel(0.0),
+    _xd(0.0),
+    _yd(0.0),
+    _xd1(0.0),
+    _yd1(0.0),
+    _xd2(0.0),
+    _yd2(0.0),
+    _xdf(0.0),
+    _xdf1(0.0),   
+    _xdf2(0.0),
+    _ydf(0.0),
+    _ydf1(0.0),
+    _ydf2(0.0),
     _cnt(0),
     _cntsub(0),
+    _cntldr(0),
     _context(1), 
     _publisher(_context, ZMQ_PUB), 
     _contextsub(1), 
@@ -43,8 +55,12 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     _started(boost::posix_time::microsec_clock::local_time()),
     _current(boost::posix_time::microsec_clock::local_time()),
     _current1(boost::posix_time::microsec_clock::local_time()),
-    _previous(boost::posix_time::microsec_clock::local_time())/*buf("rollnew.txt")*/{
+    _previous(boost::posix_time::microsec_clock::local_time()),
+    _offbrecv(boost::posix_time::microsec_clock::local_time()),
+    _offbrecvcurr(boost::posix_time::microsec_clock::local_time()),
+    _visionupdate(boost::posix_time::microsec_clock::local_time())/*buf("rollnew.txt")*/{
     _readBuffer.resize(256);
+    //_landBuffer.resize(15);
 	_publisher.bind("tcp://127.0.0.1:5563");
 }
 
@@ -143,6 +159,8 @@ void serialboost::SerialPort::handle_message_lidar(mavlink_message_t *msg)
         mavlink_distance_sensor_t dst;
         mavlink_msg_distance_sensor_decode(msg, &dst);
 
+        int above0_5 = 0;
+        int sum = 0;
         float lidard = dst.current_distance * 0.01f;
         float err = fabsf(lidard - _lidarprev);
         _lidarprev = lidard;
@@ -157,13 +175,56 @@ void serialboost::SerialPort::handle_message_lidar(mavlink_message_t *msg)
         {
             lidard = 0.5f;
             /* code */
-        }else if(lidard > 2.0f){
+        }else if(lidard > 3.0f){
 
-            lidard = 2.0f;
+            lidard = 3.0f;
         }
 
-        //std::cout << "lidard" << lidard << std::endl;
         _vertd = fabsf(lidard) * cos(_theta) * cos(_phi);
+
+        //std::cout << "The vertd is " << _vertd << std::endl; 
+
+        if(_vertd < 0.55f){
+
+            above0_5 = 0;
+        
+        }else{
+        
+            above0_5 = 1;
+        
+        }
+
+        if(_offb && _visrecv){
+            if(_landBuffer.size() < 20){
+            
+                _landBuffer.push_back(above0_5);
+        
+            }else{
+
+                _landBuffer.erase(_landBuffer.begin());
+                _landBuffer.push_back(above0_5);
+
+                sum = accumulate(_landBuffer.begin(), _landBuffer.end(), 0);
+            }
+
+            
+
+           // std::cout << "The sum is " << sum << std::endl; 
+
+            if(sum < 4){
+
+                _within0_5 = true;
+
+            }else{
+
+                _within0_5 = false;
+
+            }
+        }else {
+
+           _landBuffer.clear();
+           _within0_5 = false;
+        }
 
     }
 void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
@@ -172,6 +233,7 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
 		mavlink_msg_local_position_ned_decode(msg, &lpos);
 		_zned = lpos.z;
 		_vzned = lpos.vz;
+        uint32_t millilapsed = 0;
 
         //LPOSZ STATE MACHINE
         if(!_offb){
@@ -195,50 +257,55 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
 		float ez = _zsp - _zned;
 		float evz = 0.0 - _vzned;
 		
-       //_uz = -2.0*ez - 2.0*evz + 9.81;
+        _uz = -2.0*ez - 2.0*evz + 9.81;
         
-        _uz = 9.81 - 1.5*(0.25 - _vzned);
+        //_uz = 9.81 - 1.5*(0.2 - _vzned);
         //_uz = 9.81 - 1.0*tanh(4*(evz + ez));
         
+       
+        // remove visrecv from the conditions
+        if (_offb && !_timeinit)
+        {
+            _offbrecv = boost::posix_time::microsec_clock::local_time();
+            _timeinit = true;
+        
+        }else if(_offb && _visrecv){
+            
+            _offbrecvcurr = boost::posix_time::microsec_clock::local_time();
+            boost::posix_time::time_duration timelapsed = _offbrecvcurr - _offbrecv;
+            millilapsed = timelapsed.total_milliseconds();
+            
+	    //std::cout << millilapsed << std::endl;
+            if (unsigned(millilapsed) < 2000)
+            {
+                _uz = -2.0*ez - 2.0*evz + 9.81;
+            
+            }else if(unsigned(millilapsed) > 2000){
+                
+                _uz = 9.81 - 1.5*(0.15 - _vzned);
+
+               if(unsigned(millilapsed) > 6000 && _within0_5){
+                    //STOP MOTORS HERE
+                    _stopmotors = true;
+                   // _uz = 9.81 - 1.5*(0.0 - _vzned);
+                    _uz = 0.0;
+               }
+
+            }
+
+        }else if(_offb && !_visrecv){
+
+            _uz = -2.0*ez - 2.0*evz + 9.81;
+
+        }else{
+
+            _timeinit = false;
+            _stopmotors = false;
+            millilapsed = 0;
+        }
+
+        
         _uzscale = (0.6 * _uz)/9.81;
-
-        //float ey = 1.0 - lpos.y;
-        //float evy = 0 - lpos.vy;
-        //float sy = evy + 5.0*ey;
-        //float epsy = 1.0f;
-        //float etay = 5.0f;
-        //float satcompy;
-
-        //  if(fabsf(sy) <= epsy){
-        //     satcompy = sy/epsy;
-        // }else if(sy > epsy){
-        //     satcompy = 1.0f;
-        // }else{
-        //     satcompy = -1.0f;
-        // }
-
-        // _uy = etay*(satcompy);
-        // _uyscale = (0.5 * _uy)/9.81;
-
-        //std::cout << _uzscale << std::endl;
-
-        // float ex = 1.0 - lpos.x;
-        // float evx = 0 - lpos.vx;
-        // float s = evx + 1*ex;
-
-
-
-        // _ux = 1*tanh(2*(s));
-        // _uy = 1*tanh(2*(sy));
-
-        //_uxscale = (0.5 * _ux)/9.81;
-        //_uyscale = (0.5 * _uy)/9.81;
-
-        // if(_cnt == 30){
-        //     std::cout << "ctrl " << " " << _uy << std::endl;
-        //     _cnt = 0;
-        // }
-        // _cnt++;
 
 
         zmq::message_t message(100);
@@ -251,7 +318,7 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
         
         if(_offb && _visrecv){
             
-            boost::shared_lock<boost::shared_mutex> lock(_sendMpcMutex);
+            //boost::shared_lock<boost::shared_mutex> lock(_sendMpcMutex);
 
             if(_cnt == 30){
 		        std::cout << lpos.x << " " << lpos.y << std::endl;
@@ -259,7 +326,7 @@ void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
                 _cnt = 0;
             }
             _cnt++;
-            snprintf((char *)message.data(), 100, "%0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f", xn, vxn, yn, vyn, _xobjned, _yobjned, _xobjvel, _yobjvel, _vertd);
+            snprintf((char *)message.data(), 100, "%0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f %0.3f", xn, vxn, yn, vyn, _xobjned, _yobjned, _xdf, _ydf, _vertd);
             _publisher.send(message);
         }   
 
@@ -466,7 +533,7 @@ void serialboost::SerialPort::testfunc()
 
 	_subscriber.connect("tcp://127.0.0.1:5556");
 	_subscriber.setsockopt( ZMQ_SUBSCRIBE, "", 0);
-    uint32_t millis = 0;
+    //uint32_t millis = 0;
 	
 	//std::cout << "priinting some" << std::endl;	
 
@@ -482,9 +549,9 @@ void serialboost::SerialPort::testfunc()
 		std::istringstream iss(static_cast<char *>(update.data()));
 		iss >> uxs >> uys;
 
-        _current = boost::posix_time::microsec_clock::local_time();
-        boost::posix_time::time_duration timelapsed = _current - _started;
-        millis = timelapsed.total_milliseconds();
+        //_current = boost::posix_time::microsec_clock::local_time();
+        //boost::posix_time::time_duration timelapsed = _current - _started;
+        //millis = timelapsed.total_milliseconds();
 
         if(_cntsub == 30){
             std::cout << "Publishing ctrl " << uxs << std::endl;
@@ -495,6 +562,13 @@ void serialboost::SerialPort::testfunc()
 
         _uxscale = uxs;
         _uyscale = uys;
+
+        if(_stopmotors){
+
+            _uxscale = 0.0;
+            _uyscale = 0.0;
+
+        }
         
         //WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ux, 0.0, _uz, 0.0, 0.0);
 		//WriteToPixhawk();
@@ -523,8 +597,9 @@ void serialboost::SerialPort::receivevision()
             //std::cout << "gettin here loop" << std::endl;
 
             zmq::message_t update;
-
             _subscribevis.recv(&update);
+
+            _visionupdate = boost::posix_time::microsec_clock::local_time();
 
             _visrecv = true;
 
@@ -533,6 +608,8 @@ void serialboost::SerialPort::receivevision()
             float xnew, ynew;
             float beta;
             float xvirtual, yvirtual;
+            float alpha = 2/0.016;
+            float k = 0.5*0.5;
             std::istringstream iss(static_cast<char *>(update.data()));
             iss >> ucam >> vcam;
 
@@ -551,56 +628,50 @@ void serialboost::SerialPort::receivevision()
             // theta is pitch, phi is roll
             beta = 1.0f / (sin(_theta)*xnew + cos(_theta)*sin(_phi)*ynew + cos(_theta)*cos(_phi));
 
-            xvirtual = beta * (cos(_theta) * xnew + sin(_theta) * sin(_phi) * ynew + sin(_theta) * cos(_phi)) + 0.1f;
-            yvirtual = beta * (cos(_phi) * ynew - sin(_phi));
+            xvirtual = beta * (cos(_theta) * xnew + sin(_theta) * sin(_phi) * ynew + sin(_theta) * cos(_phi)) + 0.15;
+            yvirtual = beta * (cos(_phi) * ynew - sin(_phi)) + 0.15;
 
             xvirtual = _vertd * xvirtual;
             yvirtual = _vertd * yvirtual;
 
             _xobjned = _xned + cos(_psi) * xvirtual - sin(_psi) * yvirtual;
             _yobjned = _yned + sin(_psi) * xvirtual + cos(_psi) * yvirtual;
+            _xd = _xobjned;
+            _yd = _yobjned;
 
-            _xobjvel = (_xobjned - _xobjnedprev)/0.016;
-            _yobjvel = (_yobjned - _yobjnedprev)/0.016;
+            _xdf = (1.0f/(alpha*alpha*k + alpha + 1.0))*(alpha*_xd - alpha*_xd2 - _xdf1*(2.0 - 2.0*alpha*alpha*k) - _xdf2*(alpha*alpha*k - alpha + 1.0));
+            _xd2 = _xd1;
+            _xd1 = _xd;
+            _xdf2 = _xdf1;
+            _xdf1 = _xdf;
 
-            _xobjnedprev = _xobjned;
-            _yobjnedprev = _yobjned;
+            _ydf = (1.0f/(alpha*alpha*k + alpha + 1.0))*(alpha*_yd - alpha*_yd2 - _ydf1*(2.0 - 2.0*alpha*alpha*k) - _ydf2*(alpha*alpha*k - alpha + 1.0));
+            _yd2 = _yd1;
+            _yd1 = _yd;
+            _ydf2 = _ydf1;
+            _ydf1 = _ydf;
 
-            if (fabsf(_xobjvel -_xobjvelprev) > 0.4)
-            {
-                _xobjvel = _xobjvelprev;
-                
-            }
-
-            if (fabsf(_yobjvel -_yobjvelprev) > 0.4)
-            {
-                _yobjvel = _yobjvelprev;
-                
-            }
-
-
-            
             //------------------------------------------//
-            if (_xobjvel > 2.0f)
+            if (_xdf > 2.0f)
             {
-                _xobjvel = 2.0f;
+                _xdf = 2.0f;
             
-            }else if (_xobjvel < -2.0f){
+            }else if (_xdf < -2.0f){
 
-                _xobjvel = -2.0f;
+                _xdf = -2.0f;
             }else{}
 
-            if (_yobjvel > 2.0f)
+            if (_ydf > 2.0f)
             {
-                _yobjvel = 2.0f;
+                _ydf = 2.0f;
             
-            }else if (_yobjvel < -2.0f){
+            }else if (_ydf < -2.0f){
 
-                _yobjvel = -2.0f;
+                _ydf = -2.0f;
             }else{}
 
-            _xobjvelprev = _xobjvel;
-            _yobjvelprev = _yobjvel;
+            //_xobjvelprev = _xobjvel;
+            //_yobjvelprev = _yobjvel;
             //std::cout << "x,y are " << _xobjned << "," << _yobjned << std::endl;
 
 
@@ -617,18 +688,56 @@ void serialboost::SerialPort::sendoffboardcommands()
 {
     int count = 0;
     uint32_t millis = 0;
-    float vx = 0.0;
-    float vy = 0.0;
-    float vz = 0.0;
+    uint32_t millistimeout = 0;
+    //float vx = 0.0;
+    //float vy = 0.0;
+    //float vz = 0.0;
     bool flag = false;
 
     try{
         while(true){
 
             usleep(10000);
+
             _current = boost::posix_time::microsec_clock::local_time();
             boost::posix_time::time_duration timelapsed = _current - _started;
             millis = timelapsed.total_milliseconds();
+
+            boost::posix_time::time_duration timeout = _current - _visionupdate;
+            millistimeout = timeout.total_milliseconds();
+
+            
+            if(_offb){
+                if (unsigned(millistimeout) > 100)
+                    {
+                        _visrecv = false;
+            
+                    }else{
+
+                        _visrecv = true;
+
+                    }
+
+                if (!_visrecv)
+                    {
+                        float ex = _xobjned - _xned;
+                        float ey = _yobjned - _yned;
+
+                        if(fabsf(ex) < 0.1 && fabsf(ey) < 0.1){
+
+                                _visrecv = true;
+
+                        }else {
+
+                                float ang = atan2(ey, ex);
+                                _uxscale = 0.1 * cos(ang);
+                                _uyscale = 0.1 * sin(ang);
+
+
+                        }
+
+                    }
+            }
 
             if (_offb && !flag)
             {
