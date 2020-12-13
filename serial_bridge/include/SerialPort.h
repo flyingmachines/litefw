@@ -21,8 +21,8 @@
 #define NELEMS(x)  (sizeof(x) / sizeof((x)[0]))
 #define principalx 487.67
 #define principaly 486.75
-#define u0 312.25
-#define v0 237.23
+#define u0 312.25 //312.25
+#define v0 237.23 //237.23
 #define kdu 0.467
 
 namespace serialboost {
@@ -69,6 +69,10 @@ namespace serialboost {
         float _xned;
 
         float _yned;
+
+        float _xvned;
+
+        float _yvned;
 
         float _xobjned;
 
@@ -130,6 +134,8 @@ namespace serialboost {
 
         int _cntldr;
 
+        int _cntlog;
+
 		mavlink_message_t _msg;
 
 		mavlink_status_t _status;
@@ -182,7 +188,7 @@ namespace serialboost {
 		
 		//boost::posix_time::ptime ended_;
 
-		//boost::iostreams::stream_buffer<boost::iostreams::file_sink> buf;
+		boost::iostreams::stream_buffer<boost::iostreams::file_sink> _buflog;
         
         void SetErrorCode(const boost::system::error_code &ec);
         
