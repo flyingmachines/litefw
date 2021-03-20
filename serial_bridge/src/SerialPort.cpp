@@ -622,8 +622,9 @@ void serialboost::SerialPort::receivevision()
             float xnew, ynew;
             float beta;
             float xvirtual, yvirtual;
-            float alpha = 2/0.016;
-            float k = 0.5*0.5;
+            //float alpha = 2/0.016;
+            float alpha = 2/dt;
+	    float k = 0.5*0.5;
             std::istringstream iss(static_cast<char *>(update.data()));
             iss >> ucam >> vcam;
 
