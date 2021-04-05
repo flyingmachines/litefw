@@ -1,58 +1,30 @@
 #include "SerialPort.h"
 
-
 serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService, 
     const std::string &portName) : 
     _serialPort(ioService, portName), 
     _isOpen(false), 
-    _gcstodrone(true),
-    //_context(1), 
-    //_publisher(_context, ZMQ_PUB), 
+    _start(false), 
     _contextsub(1), 
-    _subscriber(_contextsub, ZMQ_SUB),
-    _started(boost::posix_time::microsec_clock::local_time()),
-    _current(boost::posix_time::microsec_clock::local_time()),
-    _sock(socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP))/*buf("rollnew.txt")*/
-    {
-
-    strcpy(target_ip, "192.168.1.6");
-
+    _subscriber(_contextsub, ZMQ_SUB), 
+    x_ned(0.0), 
+    y_ned(0.0), 
+    z_ned(0.0), 
+    _cnt(0), 
+    _admittancecnt(0), 
+    _yawip(0.0),
+    _ks(100.0),
+    _ds(20.0),
+    _ms(-100.0),
+    _errk(0.0),
+    _errk1(0.0),
+    _errk2(0.0),
+    _tauk1(0.0),
+    _tauk2(0.0) /*buf("rollnew.txt")*/{
     _readBuffer.resize(128);
-
-    memset(&_buf, 0, sizeof(_buf));
-
-    memset(&locAddr, 0, sizeof(locAddr));
-	locAddr.sin_family = AF_INET;
-	locAddr.sin_addr.s_addr = INADDR_ANY;
-	locAddr.sin_port = htons(14551);
-
-	if (-1 == bind(_sock,(struct sockaddr *)&locAddr, sizeof(struct sockaddr)))
-    {
-		perror("Error Bind Failed");
-		close(_sock);
-		exit(EXIT_FAILURE);
-    }
-
-    #if (defined __QNX__) | (defined __QNXNTO__)
-		if (fcntl(_sock, F_SETFL, O_NONBLOCK | FASYNC) < 0)
-	#else
-		if (fcntl(_sock, F_SETFL, O_NONBLOCK | O_ASYNC) < 0)
-	#endif
-
-	{
-		fprintf(stderr, "error setting nonblocking: %s\n", strerror(errno));
-		close(_sock);
-		exit(EXIT_FAILURE);
- 	}
-
-    memset(&gcAddr, 0, sizeof(gcAddr));
-	gcAddr.sin_family = AF_INET;
-	gcAddr.sin_addr.s_addr = inet_addr(target_ip);
-	gcAddr.sin_port = htons(14550);
 	//_publisher.bind("tcp://127.0.0.1:5563");
-    
-    }
-
+	float q[]={0.0,0.0,0.0,0.0};
+}
  
 boost::system::error_code serialboost::SerialPort::Flush() {
     boost::system::error_code ec;
@@ -85,11 +57,13 @@ void serialboost::SerialPort::ReadComplete(
     const boost::system::error_code &ec, size_t bytesTransferred) {
     if (!ec) {
         if (bytesTransferred > 0){
+            //_onRead(boost::ref(_serialPort.get_io_service()), 
+            //    boost::cref(_readBuffer), bytesTransferred);
 				
 			for(int i=0; i < bytesTransferred; i++){
 				if(mavlink_parse_char(MAVLINK_COMM_0,boost::cref(_readBuffer[i]),&_msg,&_status))
 					{
-     		//		//std::cout << "Received message with ID" << _msg.msgid << _msg.compid << _msg.sysid << std::endl;
+     				//std::cout << "Received message with ID" << _msg.msgid << _msg.compid << _msg.sysid << std::endl;
    					handle_message(&_msg);
    					}
 			}
@@ -111,77 +85,13 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 			handle_message_heartbeat(msg);
  			break;
 
- 		case MAVLINK_MSG_ID_SYS_STATUS:
- 			handle_message_status(msg);
- 			break;
-
  		case MAVLINK_MSG_ID_ATTITUDE:
 			handle_message_attitude(msg);
 			break;
-        
-        case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
-        	handle_message_id_param_request_list(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_PARAM_VALUE:
-        	handle_message_param_value(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
-        	handle_message_param_request_read(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_PARAM_SET:
-        	handle_message_param_set(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_MISSION_REQUEST_INT:
-        	handle_message_id_mission_request_int(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_MISSION_ITEM_INT:
-        	handle_message_id_mission_item_int(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_MISSION_ITEM_REACHED:
-            handle_message_mission_item_reached(msg);
-            break;
-
-        case MAVLINK_MSG_ID_MISSION_COUNT:
-            handle_message_mission_count(msg);
-            break;
-
-        case MAVLINK_MSG_ID_MISSION_ITEM:
-            handle_message_mission_item(msg);
-            break;
-
-        case MAVLINK_MSG_ID_MISSION_ACK:
-        	handle_message_id_mission_ack(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
-        	handle_message_mission_request_list(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_MISSION_SET_CURRENT:
-        	handle_message_set_current_mission_id(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_MISSION_CURRENT:
-        	handle_message_mission_current(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_STATUSTEXT:
-        	handle_message_statustext(msg);
-        	break;
-
-        case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:
-        	handle_message_mission_clear_all(msg);
-        	break;
 
 		//case MAVLINK_MSG_ID_LOCAL_POSITION_NED:
-		//	handle_message_lpos_ned(msg);
-		//	break;
+			//handle_message_lpos_ned(msg);
+			//break;
 
 		//case MAVLINK_MSG_ID_POSITION_TARGET_LOCAL_NED:
 		//	handle_message_lpos_ned_target(msg);
@@ -191,189 +101,6 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
  		}
  	}
 
-void serialboost::SerialPort::handle_message_param_set(mavlink_message_t *msg)
-	{
-
-		uint8_t buffer[128];
-		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
-		std::vector<unsigned char> vec(buffer, buffer + len);
-		Write(&vec[0], vec.size());
-
-	}
-
-void serialboost::SerialPort::handle_message_param_request_read(mavlink_message_t *msg)
-	{		
-
-		uint8_t buffer[128];
-		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
-		std::vector<unsigned char> vec(buffer, buffer + len);
-		Write(&vec[0], vec.size());
-
-	}
-
-void serialboost::SerialPort::handle_message_id_param_request_list(mavlink_message_t *msg)
-	{
-
-		uint8_t buffer[128];
-		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
-		std::vector<unsigned char> vec(buffer, buffer + len);
-		Write(&vec[0], vec.size());
-
-	}
-
-void serialboost::SerialPort::handle_message_param_value(mavlink_message_t *msg)
-	{
-
-		memset(&_buf, 0, sizeof(_buf));
-		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-
-	}
-
-void serialboost::SerialPort::handle_message_id_mission_request_int(mavlink_message_t *msg)
-	{
-
-		if(_gcstodrone){
-			/*When GCS to Drone is active mission request int goes from drone to gcs*/
-			memset(&_buf, 0, sizeof(_buf));
-			uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-			int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-		
-		}else{
-
-			uint8_t buffer[128];
-			size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
-			std::vector<unsigned char> vec(buffer, buffer + len);
-			Write(&vec[0], vec.size());
-
-		}
-	
-	}
-
-void serialboost::SerialPort::handle_message_id_mission_item_int(mavlink_message_t *msg)
-	{
-
-		if(_gcstodrone){
-			
-			uint8_t buffer[128];
-			size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
-			std::vector<unsigned char> vec(buffer, buffer + len);
-			Write(&vec[0], vec.size());
-		
-		}else{
-			
-			memset(&_buf, 0, sizeof(_buf));
-			uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-			int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-
-		}
-	}
-
-void serialboost::SerialPort::handle_message_mission_item(mavlink_message_t *msg)
-    {
-        	mavlink_mission_item_t mission;
-        	mavlink_msg_mission_item_decode(msg, &mission);
-        	std::cout << unsigned(mission.seq) << " "<< mission.x << " "<< mission.y << std::endl;
-    }
-
-void serialboost::SerialPort::handle_message_id_mission_ack(mavlink_message_t *msg)
-	{
-		if(_gcstodrone){
-
-			memset(&_buf, 0, sizeof(_buf));
-			uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-			int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-
-		}else{
-
-			uint8_t buffer[128];
-			size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
-			std::vector<unsigned char> vec(buffer, buffer + len);
-			Write(&vec[0], vec.size());
-
-		}
-	}
-
-void serialboost::SerialPort::handle_message_mission_count(mavlink_message_t *msg)
-    {
-		if(_gcstodrone){
-			/*This is the mission count being sent from gcs to drone*/
-			uint8_t buffer[128];
-			size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
-			std::vector<unsigned char> vec(buffer, buffer + len);
-			Write(&vec[0], vec.size());
-    	
-    	}else{
-    		/*if _gcstodrone is false that means mission count is sent from drone to gcs*/
-    		memset(&_buf, 0, sizeof(_buf));
-			uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-			int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-
-    	}
-    }
-
-void serialboost::SerialPort::handle_message_mission_item_reached(mavlink_message_t *msg)
-    {
-        
-    	memset(&_buf, 0, sizeof(_buf));
-		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-        //mavlink_mission_item_reached_t missionreached;
-        //mavlink_msg_mission_item_reached_decode(msg, &missionreached);
-
-        //std::cout << unsigned(missionreached.seq) << std::endl;
-    }
-
-void serialboost::SerialPort::handle_message_mission_request_list(mavlink_message_t *msg)
-	{
-
-		_gcstodrone = false;
-		uint8_t buffer[128];
-		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
-		std::vector<unsigned char> vec(buffer, buffer + len);
-		Write(&vec[0], vec.size());
-
-	}
-
-void serialboost::SerialPort::handle_message_set_current_mission_id(mavlink_message_t *msg)
-	{
-		
-		uint8_t buffer[128];
-		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
-		std::vector<unsigned char> vec(buffer, buffer + len);
-		Write(&vec[0], vec.size());		
-
-	}
-
-void serialboost::SerialPort::handle_message_mission_current(mavlink_message_t *msg)
-	{
-
-		memset(&_buf, 0, sizeof(_buf));
-		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-
-	}
-
-void serialboost::SerialPort::handle_message_statustext(mavlink_message_t *msg)
-	{
-
-		memset(&_buf, 0, sizeof(_buf));
-		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-
-	}
-
-void serialboost::SerialPort::handle_message_mission_clear_all(mavlink_message_t *msg)
-	{
-
-		_gcstodrone = true;
-		uint8_t buffer[128];
-		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
-		std::vector<unsigned char> vec(buffer, buffer + len);
-		Write(&vec[0], vec.size());		
-
-	}
-
 void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
  	{
 		
@@ -381,44 +108,41 @@ void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
 		mavlink_heartbeat_t hb;
  		mavlink_msg_heartbeat_decode(msg, &hb);
 
- 		/*Sending data to QGC*/
-		memset(&_buf, 0, sizeof(_buf));
-		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
-
  		std::cout << "Received Heartbeat Message" << std::endl;
  	}
 
-void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
- 	{
-		
-		mavlink_attitude_t at;
-		mavlink_msg_attitude_decode(msg, &at);
-		
-		zmq::message_t message(20);
-		float roll = at.roll;
-		float yaw = at.yaw;
-		float pitch = at.pitch;		
-		
-		snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
-		//_publisher.send(message);
- 	}
+/*void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
+{
+	mavlink_local_position_ned_t lpos;
+	mavlink_msg_local_position_ned_decode(msg, &lpos);
 
-void serialboost::SerialPort::handle_message_status(mavlink_message_t *msg)
-	{
-		// /mavlink_sys_status_t ss;
+	std::cout<<"\nReceived LOCAL_POSITION_NED MESSAGE"<<std::endl;
+	
 
-		memset(&_buf, 0, sizeof(_buf));
-		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
-		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+	float pos_x,pos_y,pos_z;
 
-	}
+	pos_x = lpos.x;
+	pos_y = lpos.y;
+	pos_z = lpos.z;
+
+	//printf("\n Received position : [x=%f y=%f z=%f]\n",,pos_x,pos_y,pos_z);
+
+	Add respective mavlink libraries and case messages and add publisher.send at the end of each handle_message callback function
+
+}
+*/
+
 
 void serialboost::SerialPort::WriteToPixhawk(){
 		mavlink_message_t msg;
+		
 		uint8_t buffer[128];
 		
-		mavlink_msg_command_long_pack(1, 1, &msg, MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_GENERIC, 1, 1, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+		//float q[4] = {1.0,0.0,0.0,0.0};
+		//mavlink_msg_att_pos_mocap_pack(1, 1, &msg, 0, q , 0.3f, 0.6f, -0.5f);
+
+		mavlink_msg_att_pos_mocap_pack(1, 1, &msg, 0, q, x_ned, y_ned, z_ned);
+
 
 		size_t len = mavlink_msg_to_send_buffer(buffer, &msg);	
 
@@ -428,22 +152,6 @@ void serialboost::SerialPort::WriteToPixhawk(){
 
 		//std::cout << "here" << std::endl;
 	}
-
-void serialboost::SerialPort::WriteToPixhawkOffboardSetpoint(uint32_t ms, float x, float y, float z, float vx, float vy, float vz, float afx, float afy, float afz, float yaw, float yaw_rate ){
-        mavlink_message_t msg;
-        uint8_t buffer[128];
-        // uint16_t typemask = 0b0010110111000111;
-        uint16_t typemask = 0b0010110111111000;
-
-        mavlink_msg_set_position_target_local_ned_pack(1, 1, &msg, ms, 1, 1, 1, typemask, x, y, z, vx, vy, vz, afx, afy, afz, yaw, yaw_rate);
-
-        size_t len = mavlink_msg_to_send_buffer(buffer, &msg);
-
-        std::vector<unsigned char> vec(buffer, buffer + len);
-
-        Write(&vec[0], vec.size());
-
-}
 
 void serialboost::SerialPort::Write(const unsigned char *buffer, 
     size_t bufferLength) {
@@ -518,6 +226,7 @@ void serialboost::SerialPort::openport(unsigned int baudRate,
  
         _isOpen = true;
  		
+ 		//std::cout << "getting here " << std::endl;
 		_serialPort.get_io_service().post(boost::bind(
             &SerialPort::ReadBegin, shared_from_this()));
 }
@@ -547,115 +256,174 @@ void serialboost::SerialPort::Write(const std::string &buffer) {
         buffer.size());
 }
 
-void serialboost::SerialPort::testfunc()
+void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
+ 	{
+		
+		mavlink_attitude_t at;
+		mavlink_msg_attitude_decode(msg, &at);
+		
+		zmq::message_t message(20);
+		//float roll = at.roll;
+		float yaw = at.yaw;
+		float dt = 0.05;
+		//float pitch = at.pitch;		
+
+		//std::cout << roll << std::endl;
+
+		if (_admittancecnt == 5){
+
+			_errk = -_ms*dt*dt*(yaw + 2.0*_tauk1 + _tauk2) - (2.0f*dt*dt*_ks - 8.0f)*_errk1 -(4.0f + dt*dt*_ks - 2.0f*_ds*dt)*_errk2;
+			_errk = _errk / (4.0f + 2.0f*_ds*dt + dt*dt*_ks);
+			
+			if(abs(_errk - yaw) > 0.3){
+				_errk = yaw;
+			}
+
+			_errk2 = _errk1;
+			_errk1 = _errk;
+			_tauk2 = _tauk1;
+			_tauk1 = yaw;
+
+			_admittancecnt = 0;
+			_yawip = _errk;
+
+			//std::cout << _yawip << " " << yaw <<  std::endl;
+		}
+
+		_admittancecnt++;
+		
+		//snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
+		//_publisher.send(message);
+ 	}
+
+void serialboost::SerialPort::bridge_subscribe()
 {
+	_subscriber.connect("tcp://127.0.0.1:3885");
+    _subscriber.setsockopt(ZMQ_SUBSCRIBE,"",0);
+    
+    try {
+        while(1)
+        {
+            zmq::message_t pose_msgR;
+
+            _subscriber.recv(&pose_msgR);  
+
+            float quart_w, quart_x, quart_y, quart_z, x, y, z;
+            
+            std::istringstream iss(static_cast<char *>(pose_msgR.data()));
+
+            
+            iss>>quart_w>>quart_x>>quart_y>>quart_z>>x>>y>>z; 
+
+            q[0] = quart_w; 
+            q[1] = quart_x;
+            q[2] = quart_y;
+            q[3] = quart_z;
+            x_ned = x;
+            y_ned = y;
+            z_ned = z; 
+
+            if(_cnt == 100){
+            std::cout<<"\n Orientation :\n"<<"\t"<<q[0]<<"\n \t"<<q[1]<<"\n \t"<<q[2]<<"\n \t"<<q[3]<<std::endl;
+            std::cout<<"\n Position :\n"<<"\t"<<x_ned<<"\n \t"<<y_ned<<"\n \t"<<z_ned<<std::endl; 
+            _cnt = 0;
+            }
+
+            _cnt++;
+            
+            WriteToPixhawk();
+
+        }
+       
+    }
+    catch(std::exception &e){
+    	std::cout<<"Error Occured!! \n";
+   } 
+}
+
+void serialboost::SerialPort::trajecmod()
+{
+	mavlink_message_t msg;
+	uint8_t buffer[128];
+	uint16_t spmask = 0b0000100111111000;
+	//uint16_t spmask = 0b0000110111000111;
+	//std::string data("test.csv");
+	//std::ifstream in(data.c_str());
+	
+	//while(!in.is_open()) return 1;
+
+	//typedef boost::tokenizer<boost::escaped_list_separator<char> > Token;
+	//std::vector<std::string> vec;
+	//std::string line;
+	//io::CSVReader<5> in("traj2.csv");
+	//in.read_header(io::ignore_extra_column, "t", "x", "y", "z", "r");
+	//float t, x, y, z, r;
+	//_yawned = -1.5f;
+	float xv = 0.0;
+	float yv = 0.0;
+	float yawoffboard = -1.5f;
+	float xtraveled = 0.0;
+	float ytraveled = 0.0;
+
+	while(true){
+		if(_start){
+
+		xv = 0.0f;
+		yv = -3.0f;
+		yawoffboard = _yawip;
+
+		}
+		mavlink_msg_set_position_target_local_ned_pack(1, 1, &msg, 0, 0, 0, 1, spmask, xv, yv, -0.85f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, yawoffboard, 0.0f);
+		size_t len = mavlink_msg_to_send_buffer(buffer, &msg);
+		std::vector<unsigned char> vec(buffer, buffer+len);
+		Write(&vec[0], vec.size());
+		usleep(50000);
+	}	
+}
+
+void serialboost::SerialPort::starttraj()
+{
+	int strinp;
+	
+	std::cout << "Do you want to start trajectory. Enter start" << std::endl;
+
+	std::cin >> strinp;
+
+	_start = strinp;
+}
+// Commented out to avoid confusion between bridge subscriber() vs this testfunc()
+//void serialboost::SerialPort::testfunc()
+//{
 	//boost::posix_time::seconds worktime(3);	
 	//while(1){
 
-	_subscriber.connect("tcp://127.0.0.1:5556");
-	_subscriber.setsockopt( ZMQ_SUBSCRIBE, "", 0);
+//	_subscriber.connect("tcp://127.0.0.1:5556");
+//	_subscriber.setsockopt( ZMQ_SUBSCRIBE, "", 0);
 	
-	//std::cout << "priinting some" << std::endl;	
+//	std::cout << "priinting some" << std::endl;	
 
-	try{
-		while(true){
-	//for(int up_nbr = 0; up_nbr < 100; up_nbr++){		
+//	try{
+//		while(true){
+//	for(int up_nbr = 0; up_nbr < 100; up_nbr++){		
 		
-		zmq::message_t update;
+//		zmq::message_t update;
 
-		_subscriber.recv(&update);
+//		_subscriber.recv(&update);
 
-		int zipcode, temperature, relhumidity;
-		std::istringstream iss(static_cast<char *>(update.data()));
-		iss >> zipcode >> temperature >> relhumidity;
+//		int zipcode, temperature, relhumidity;
+//		std::istringstream iss(static_cast<char *>(update.data()));
+//		iss >> zipcode >> temperature >> relhumidity;
 
-		std::cout << "ZTR" << zipcode << " " << temperature << " " << relhumidity << " " << std::endl;
+//		std::cout << "ZTR" << zipcode << " " << temperature << " " << relhumidity << " " << std::endl;
 	
-		WriteToPixhawk();
+//		WriteToPixhawk();
 
-			}
-		}
-	 catch (std::exception &e) {
+//			}
+//		}
+//	 catch (std::exception &e) {
 
-	 	std::cout << "Error occurred " << std::endl;
-	 }		
+//	 	std::cout << "Error occurred " << std::endl;
+//	 }		
 	
-}
+//}
 
-void serialboost::SerialPort::sendoffboardcommands()
-{
-    int count = 0;
-    uint32_t millis = 0;
-    float vx = 0.0;
-    float vy = 0.0;
-    float vz = 0.0;
-
-    try{
-        while(true){
-
-            std::cout << "offboard mode" << std::endl;
-            _current = boost::posix_time::microsec_clock::local_time();
-            boost::posix_time::time_duration timelapsed = _current - _started;
-            millis = timelapsed.total_milliseconds();
-
-            WriteToPixhawkOffboardSetpoint(millis, 0.0, 0.0, 0.1, vx, vy, vz, 0.0, 0.0, 0.0, 0.0, 0.0);
-            usleep(100000);
-
-            }
-        }
-    catch (std::exception &e){
-        std::cout << "Error occured " << std::endl;
-    }
-}
-
-void serialboost::SerialPort::recvudpqgc()
-{
-    /*Receive Data From QGC's UDP Port*/
-    int recsize;
-    int nbytes;
-    mavlink_message_t msgqgc;
-    mavlink_status_t statusqgc;
-    
-    while(true){
-
-    	FD_ZERO(&rfs);
-    	FD_SET(_sock, &rfs);
-
-        memset(&_buf, 0, sizeof(_buf));
-
-        std::cout << "getting here" << std::endl;
-        recsize = select(_sock+1, &rfs, NULL, NULL, NULL);
-
-        if (recsize >= 1){
-
-        	nbytes = recvfrom(_sock, (void *)_buf, BUFFER_LENGTH, 0, (struct sockaddr *)&gcAddr, &_fromlen);
-            
-        	if(nbytes > 0){
-        		for (int k = 0; k < nbytes; k++)
-					{
-						if (mavlink_parse_char(MAVLINK_COMM_1, _buf[k], &msgqgc, &statusqgc))
-						{
-							if(msgqgc.msgid == MAVLINK_MSG_ID_MISSION_COUNT){
-
-								_gcstodrone = true;
-							
-							}
-
-							handle_message(&msgqgc);
-						}
-					}
-        	}
-
-            std::cout << nbytes<<std::endl;
-        
-        }
-        
-        else {
-            
-            std::cout << "no data"<<std::endl;
-        
-        }
-
-    }
-
-}
