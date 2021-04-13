@@ -15,6 +15,7 @@
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -101,7 +102,21 @@ namespace serialboost {
 
         mavlink_heartbeat_t hb;
 
-        //int _sock;
+        int _sock;
+
+        struct sockaddr_in gcAddr;
+
+        struct sockaddr_in locAddr;
+
+        uint8_t _buf[BUFFER_LENGTH];
+
+        char target_ip[50];
+
+        ssize_t _recsize;
+
+        socklen_t _fromlen = sizeof(gcAddr);
+
+        fd_set rfs;
 
         //uint8_t _buf[BUFFER_LENGTH];
 
@@ -130,6 +145,27 @@ namespace serialboost {
 	    void handle_message_heartbeat(mavlink_message_t *msg);
 
 	    void handle_message_attitude(mavlink_message_t *msg);	
+
+        void handle_message_status(mavlink_message_t *msg);
+
+        void handle_message_id_param_request_list(mavlink_message_t *msg);
+
+        void handle_message_param_value(mavlink_message_t *msg);
+
+        void handle_message_param_request_read(mavlink_message_t *msg);
+
+        void handle_message_param_set(mavlink_message_t *msg);
+
+        void handle_message_log_request_list(mavlink_message_t *msg);
+
+        void handle_message_log_entry(mavlink_message_t *msg);
+
+        void handle_message_log_request_data(mavlink_message_t *msg);
+
+        void handle_message_log_data(mavlink_message_t *msg);
+
+        void handle_message_log_request_end(mavlink_message_t *msg);
+         
 
     public:
 
@@ -161,6 +197,7 @@ namespace serialboost {
 
         void starttraj();
 
+        void recvudpqgc();
     };
 };
 

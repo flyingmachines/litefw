@@ -14,11 +14,15 @@ void serial_create::Create(boost::asio::io_service &ios) {
 
 			boost::thread subthread(boost::bind(&serialboost::SerialPort::bridge_subscribe, _serialPort));	
 
+            boost::thread recvudpqgcthread(boost::bind(&serialboost::SerialPort::recvudpqgc, _serialPort));
+
             //boost::thread userinputthread(boost::bind(&serialboost::SerialPort::starttraj, _serialPort));
 
             //boost::thread trajectorythread(boost::bind(&serialboost::SerialPort::trajecmod, _serialPort));
 				
-			subthread.detach();	
+			subthread.detach();
+
+            recvudpqgcthread.detach();	
 
             //userinputthread.detach();	
 

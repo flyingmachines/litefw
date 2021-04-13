@@ -11,10 +11,40 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     _yned(0.0), 
     _zned(0.0), 
     _cnt(0), 
-    _yawip(0.0)
-    //_ms(-100.0),
-    /*buf("rollnew.txt")*/{
+    _yawip(0.0),
+    _sock(socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) //_ms(-100.0), /*buf("rollnew.txt")*/
+    {
     _readBuffer.resize(128);
+
+    strcpy(target_ip, "192.168.1.3");
+    memset(&_buf, 0, sizeof(_buf));
+    memset(&locAddr, 0, sizeof(locAddr));
+    locAddr.sin_family = AF_INET;
+    locAddr.sin_addr.s_addr = INADDR_ANY;
+    locAddr.sin_port = htons(14551);
+
+    if(-1 == bind(_sock,(struct sockaddr *)&locAddr, sizeof(struct sockaddr))){
+        perror("Error Bind Failed");
+        close(_sock);
+        exit(EXIT_FAILURE);
+    }
+
+    #if (defined __QNX__) | (defined __QNXNTO__)
+		if (fcntl(_sock, F_SETFL, O_NONBLOCK | FASYNC) < 0)
+	#else
+		if (fcntl(_sock, F_SETFL, O_NONBLOCK | O_ASYNC) < 0)
+	#endif
+
+	{
+		fprintf(stderr, "error setting nonblocking: %s\n", strerror(errno));
+		close(_sock);
+		exit(EXIT_FAILURE);
+ 	}
+
+    memset(&gcAddr, 0, sizeof(gcAddr));
+	gcAddr.sin_family = AF_INET;
+	gcAddr.sin_addr.s_addr = inet_addr(target_ip);
+	gcAddr.sin_port = htons(14550);
 	//_publisher.bind("tcp://127.0.0.1:5563");
 }
  
@@ -81,6 +111,46 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 			handle_message_attitude(msg);
 			break;
 
+        case MAVLINK_MSG_ID_SYS_STATUS:
+            handle_message_status(msg);
+ 			break;
+        
+        case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
+        	handle_message_id_param_request_list(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_PARAM_VALUE:
+        	handle_message_param_value(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
+        	handle_message_param_request_read(msg);
+        	break;
+
+        case MAVLINK_MSG_ID_PARAM_SET:
+        	handle_message_param_set(msg);
+        	break;
+        
+        case MAVLINK_MSG_ID_LOG_REQUEST_LIST:
+            handle_message_log_request_list(msg);
+            break;
+        
+        case MAVLINK_MSG_ID_LOG_ENTRY:
+            handle_message_log_entry(msg);
+            break;
+        
+        case MAVLINK_MSG_ID_LOG_REQUEST_DATA:
+            handle_message_log_request_data(msg);
+            break;
+        
+        case MAVLINK_MSG_ID_LOG_DATA:
+            handle_message_log_data(msg);
+            break;
+
+        case MAVLINK_MSG_ID_LOG_REQUEST_END:
+            handle_message_log_request_end(msg);
+            break;
+
 		//case MAVLINK_MSG_ID_LOCAL_POSITION_NED:
 			//handle_message_lpos_ned(msg);
 			//break;
@@ -95,13 +165,119 @@ void serialboost::SerialPort::handle_message(mavlink_message_t *msg)
 
 void serialboost::SerialPort::handle_message_heartbeat(mavlink_message_t *msg)
  	{
-		
-	 		
-		mavlink_heartbeat_t hb;
- 		mavlink_msg_heartbeat_decode(msg, &hb);
+		if((unsigned)msg->sysid != 255){
+	 	
+		    mavlink_heartbeat_t hb;
+ 		    mavlink_msg_heartbeat_decode(msg, &hb);
 
- 		std::cout << "Received Heartbeat Message" << std::endl;
+            memset(&_buf, 0, sizeof(_buf));
+            uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+            int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+ 		    std::cout << "Received Heartbeat Message" << std::endl;
+        }
  	}
+
+void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
+ 	{
+		
+		mavlink_attitude_t at;
+		mavlink_msg_attitude_decode(msg, &at);
+ 	}
+
+void serialboost::SerialPort::handle_message_status(mavlink_message_t *msg)
+	{
+		// /mavlink_sys_status_t ss;
+
+		memset(&_buf, 0, sizeof(_buf));
+		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+
+	}
+
+void serialboost::SerialPort::handle_message_param_set(mavlink_message_t *msg)
+	{
+
+		uint8_t buffer[128];
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		Write(&vec[0], vec.size());
+
+	}
+
+void serialboost::SerialPort::handle_message_param_request_read(mavlink_message_t *msg)
+	{		
+
+		uint8_t buffer[128];
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		Write(&vec[0], vec.size());
+
+	}
+
+void serialboost::SerialPort::handle_message_id_param_request_list(mavlink_message_t *msg)
+	{
+
+		uint8_t buffer[128];
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		Write(&vec[0], vec.size());
+
+	}
+
+void serialboost::SerialPort::handle_message_param_value(mavlink_message_t *msg)
+	{
+
+		memset(&_buf, 0, sizeof(_buf));
+		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+
+	}
+
+void serialboost::SerialPort::handle_message_log_request_list(mavlink_message_t *msg)
+    {
+        uint8_t buffer[128];
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		Write(&vec[0], vec.size());
+
+    }
+
+void serialboost::SerialPort::handle_message_log_entry(mavlink_message_t *msg)
+	{
+        //std::cout << "in log entry" << std::endl;
+		memset(&_buf, 0, sizeof(_buf));
+		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+
+	}
+
+void serialboost::SerialPort::handle_message_log_request_data(mavlink_message_t *msg)
+	{
+        uint8_t buffer[128];
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		Write(&vec[0], vec.size());
+
+	}
+
+void serialboost::SerialPort::handle_message_log_data(mavlink_message_t *msg)
+    {
+        memset(&_buf, 0, sizeof(_buf));
+		uint16_t len = mavlink_msg_to_send_buffer(_buf, msg);
+		int bytes_sent = sendto(_sock, _buf, len, 0, (struct sockaddr*)&gcAddr, sizeof(struct sockaddr_in));
+
+    }
+
+void serialboost::SerialPort::handle_message_log_request_end(mavlink_message_t *msg)
+    {
+        
+        uint8_t buffer[128];
+		size_t len = mavlink_msg_to_send_buffer(buffer, msg);	
+		std::vector<unsigned char> vec(buffer, buffer + len);
+		Write(&vec[0], vec.size());
+
+    }
+    
 
 /*void serialboost::SerialPort::handle_message_lpos_ned(mavlink_message_t *msg)
 {
@@ -248,46 +424,6 @@ void serialboost::SerialPort::Write(const std::string &buffer) {
         buffer.size());
 }
 
-void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
- 	{
-		
-		mavlink_attitude_t at;
-		mavlink_msg_attitude_decode(msg, &at);
-		
-		//zmq::message_t message(20);
-		//float roll = at.roll;
-		//float yaw = at.yaw;
-		//float dt = 0.05;
-		//float pitch = at.pitch;		
-
-		//std::cout << roll << std::endl;
-
-		// if (_admittancecnt == 5){
-
-		// 	_errk = -_ms*dt*dt*(yaw + 2.0*_tauk1 + _tauk2) - (2.0f*dt*dt*_ks - 8.0f)*_errk1 -(4.0f + dt*dt*_ks - 2.0f*_ds*dt)*_errk2;
-		// 	_errk = _errk / (4.0f + 2.0f*_ds*dt + dt*dt*_ks);
-			
-		// 	if(abs(_errk - yaw) > 0.3){
-		// 		_errk = yaw;
-		// 	}
-
-		// 	_errk2 = _errk1;
-		// 	_errk1 = _errk;
-		// 	_tauk2 = _tauk1;
-		// 	_tauk1 = yaw;
-
-		// 	_admittancecnt = 0;
-		// 	_yawip = _errk;
-
-		// 	//std::cout << _yawip << " " << yaw <<  std::endl;
-		// }
-
-		// _admittancecnt++;
-		
-		// //snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
-		// //_publisher.send(message);
- 	}
-
 void serialboost::SerialPort::bridge_subscribe()
 {
 	_subscriber.connect("tcp://127.0.0.1:3885");
@@ -382,4 +518,40 @@ void serialboost::SerialPort::starttraj()
 	std::cin >> strinp;
 
 	_start = strinp;
+}
+
+void serialboost::SerialPort::recvudpqgc()
+{
+    int recsize, nbytes;
+    mavlink_message_t msgqgc;
+    mavlink_status_t statusqgc;
+
+    while(true){
+        
+        FD_ZERO(&rfs);
+        FD_SET(_sock, &rfs);
+
+        memset(&_buf, 0, sizeof(_buf));
+
+        recsize = select(_sock+1, &rfs, NULL, NULL, NULL);
+
+        if (recsize >= 1){
+
+            nbytes = recvfrom(_sock, (void *)_buf, BUFFER_LENGTH, 0, (struct sockaddr *)&gcAddr, &_fromlen);
+
+            if (nbytes > 0){
+            
+                for(int k=0; k<nbytes; k++){
+                    if (mavlink_parse_char(MAVLINK_COMM_1, _buf[k], &msgqgc, &statusqgc)){
+                    
+                        handle_message(&msgqgc);
+                
+                    }
+                }
+            }
+        }else {
+            std::cout << "no data" << std::endl;
+
+        }
+    }
 }
