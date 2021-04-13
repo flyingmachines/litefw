@@ -23,7 +23,7 @@ protected:
 
 public:
 
-    serial_create(const std::string &portName, int baudRate);
+    	serial_create(const std::string &portName, int baudRate);
    
 	void Create(boost::asio::io_service &ios); 
 

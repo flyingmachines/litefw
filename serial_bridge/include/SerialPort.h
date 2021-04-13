@@ -54,7 +54,19 @@ namespace serialboost {
         
         bool _isOpen;
 
-        bool _gcstodrone;
+        bool _start;
+
+        float _xned;
+
+        float _yned;
+
+        float _zned;
+
+        int _cnt;
+
+        float _yawip;
+
+        float q[4] = {0.0,0.0,0.0,0.0};
 
 		mavlink_message_t _msg;
 
@@ -75,13 +87,13 @@ namespace serialboost {
 
         boost::system::error_code Flush();
 
-		//zmq::context_t _context;
+	    //zmq::context_t _context;
 
-		//zmq::socket_t _publisher;
+	    //zmq::socket_t _publisher;
 
-		zmq::context_t _contextsub; /*This has to be first else throws weird zmq_errort that bad address*/
+	    zmq::context_t _contextsub; /*This has to be first else throws weird zmq_errort that bad address*/
 	
-		zmq::socket_t _subscriber;
+	    zmq::socket_t _subscriber;
 
         boost::posix_time::ptime _started;
 
@@ -89,23 +101,11 @@ namespace serialboost {
 
         mavlink_heartbeat_t hb;
 
-        int _sock;
+        //int _sock;
 
-        struct sockaddr_in gcAddr; 
-        
-        struct sockaddr_in locAddr;
+        //uint8_t _buf[BUFFER_LENGTH];
 
-        uint8_t _buf[BUFFER_LENGTH];
-
-        char target_ip[50];
-
-        ssize_t _recsize;
-        
-        socklen_t _fromlen = sizeof(gcAddr);
-
-        fd_set rfs;
-
-		//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
+    	//boost::posix_time::ptime started_;// = boost::chrono::system_clock::now()
 		
 		//boost::posix_time::ptime ended_;
 
@@ -119,51 +119,17 @@ namespace serialboost {
         
         void WriteBegin();
         
-		void WriteToPixhawk(); 
+	    void WriteToPixhawk(); 
 
         void WriteToPixhawkOffboardSetpoint(uint32_t ms, float x, float y, float z, float vx, float vy, float vz, float afx, float afy, float afz, float yaw, float yaw_rate);       
 		
-		void WriteComplete(const boost::system::error_code &ec);
+	    void WriteComplete(const boost::system::error_code &ec);
 
-		void handle_message(mavlink_message_t *msg);
+	    void handle_message(mavlink_message_t *msg);
 		
-		void handle_message_heartbeat(mavlink_message_t *msg);
+	    void handle_message_heartbeat(mavlink_message_t *msg);
 
-		void handle_message_attitude(mavlink_message_t *msg);
-
-        void handle_message_mission_item(mavlink_message_t *msg);
-
-        void handle_message_mission_item_reached(mavlink_message_t *msg);
-
-        void handle_message_mission_count(mavlink_message_t *msg);
-
-        void handle_message_status(mavlink_message_t *msg);
-
-        void handle_message_id_param_request_list(mavlink_message_t *msg);
-
-        void handle_message_param_request_read(mavlink_message_t *msg);
-
-        void handle_message_param_value(mavlink_message_t *msg);
-
-        void handle_message_param_set(mavlink_message_t *msg);
-
-        void handle_message_id_mission_request_int(mavlink_message_t *msg);
-
-        void handle_message_id_mission_item_int(mavlink_message_t *msg);
-
-        void handle_message_id_mission_ack(mavlink_message_t *msg);
-
-        void handle_message_mission_request_list(mavlink_message_t *msg);
-
-        void handle_message_set_current_mission_id(mavlink_message_t *msg);
-		
-        void handle_message_mission_current(mavlink_message_t *msg);
-
-        void handle_message_statustext(mavlink_message_t *msg);
-
-        void handle_message_mission_clear_all(mavlink_message_t *msg);
-		//void testfunc();
-
+	    void handle_message_attitude(mavlink_message_t *msg);	
 
     public:
 
@@ -185,11 +151,15 @@ namespace serialboost {
         
         void Write(const std::string &buffer);	
 
-		void testfunc();
+	    void testfunc();
 
         void sendoffboardcommands();
 
-        void recvudpqgc();
+        void bridge_subscribe();
+
+        void trajecmod();
+
+        void starttraj();
 
     };
 };

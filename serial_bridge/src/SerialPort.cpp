@@ -7,23 +7,15 @@ serialboost::SerialPort::SerialPort(boost::asio::io_service &ioService,
     _start(false), 
     _contextsub(1), 
     _subscriber(_contextsub, ZMQ_SUB), 
-    x_ned(0.0), 
-    y_ned(0.0), 
-    z_ned(0.0), 
+    _xned(0.0), 
+    _yned(0.0), 
+    _zned(0.0), 
     _cnt(0), 
-    _admittancecnt(0), 
-    _yawip(0.0),
-    _ks(100.0),
-    _ds(20.0),
-    _ms(-100.0),
-    _errk(0.0),
-    _errk1(0.0),
-    _errk2(0.0),
-    _tauk1(0.0),
-    _tauk2(0.0) /*buf("rollnew.txt")*/{
+    _yawip(0.0)
+    //_ms(-100.0),
+    /*buf("rollnew.txt")*/{
     _readBuffer.resize(128);
 	//_publisher.bind("tcp://127.0.0.1:5563");
-	float q[]={0.0,0.0,0.0,0.0};
 }
  
 boost::system::error_code serialboost::SerialPort::Flush() {
@@ -141,7 +133,7 @@ void serialboost::SerialPort::WriteToPixhawk(){
 		//float q[4] = {1.0,0.0,0.0,0.0};
 		//mavlink_msg_att_pos_mocap_pack(1, 1, &msg, 0, q , 0.3f, 0.6f, -0.5f);
 
-		mavlink_msg_att_pos_mocap_pack(1, 1, &msg, 0, q, x_ned, y_ned, z_ned);
+		mavlink_msg_att_pos_mocap_pack(1, 1, &msg, 0, q, _xned, _yned, _zned);
 
 
 		size_t len = mavlink_msg_to_send_buffer(buffer, &msg);	
@@ -262,38 +254,38 @@ void serialboost::SerialPort::handle_message_attitude(mavlink_message_t *msg)
 		mavlink_attitude_t at;
 		mavlink_msg_attitude_decode(msg, &at);
 		
-		zmq::message_t message(20);
+		//zmq::message_t message(20);
 		//float roll = at.roll;
-		float yaw = at.yaw;
-		float dt = 0.05;
+		//float yaw = at.yaw;
+		//float dt = 0.05;
 		//float pitch = at.pitch;		
 
 		//std::cout << roll << std::endl;
 
-		if (_admittancecnt == 5){
+		// if (_admittancecnt == 5){
 
-			_errk = -_ms*dt*dt*(yaw + 2.0*_tauk1 + _tauk2) - (2.0f*dt*dt*_ks - 8.0f)*_errk1 -(4.0f + dt*dt*_ks - 2.0f*_ds*dt)*_errk2;
-			_errk = _errk / (4.0f + 2.0f*_ds*dt + dt*dt*_ks);
+		// 	_errk = -_ms*dt*dt*(yaw + 2.0*_tauk1 + _tauk2) - (2.0f*dt*dt*_ks - 8.0f)*_errk1 -(4.0f + dt*dt*_ks - 2.0f*_ds*dt)*_errk2;
+		// 	_errk = _errk / (4.0f + 2.0f*_ds*dt + dt*dt*_ks);
 			
-			if(abs(_errk - yaw) > 0.3){
-				_errk = yaw;
-			}
+		// 	if(abs(_errk - yaw) > 0.3){
+		// 		_errk = yaw;
+		// 	}
 
-			_errk2 = _errk1;
-			_errk1 = _errk;
-			_tauk2 = _tauk1;
-			_tauk1 = yaw;
+		// 	_errk2 = _errk1;
+		// 	_errk1 = _errk;
+		// 	_tauk2 = _tauk1;
+		// 	_tauk1 = yaw;
 
-			_admittancecnt = 0;
-			_yawip = _errk;
+		// 	_admittancecnt = 0;
+		// 	_yawip = _errk;
 
-			//std::cout << _yawip << " " << yaw <<  std::endl;
-		}
+		// 	//std::cout << _yawip << " " << yaw <<  std::endl;
+		// }
 
-		_admittancecnt++;
+		// _admittancecnt++;
 		
-		//snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
-		//_publisher.send(message);
+		// //snprintf((char *)message.data(), 20, "%0.3f %0.3f %0.3f", roll, yaw ,pitch);
+		// //_publisher.send(message);
  	}
 
 void serialboost::SerialPort::bridge_subscribe()
@@ -319,13 +311,13 @@ void serialboost::SerialPort::bridge_subscribe()
             q[1] = quart_x;
             q[2] = quart_y;
             q[3] = quart_z;
-            x_ned = x;
-            y_ned = y;
-            z_ned = z; 
+            _xned = x;
+            _yned = y;
+            _zned = z; 
 
             if(_cnt == 100){
             std::cout<<"\n Orientation :\n"<<"\t"<<q[0]<<"\n \t"<<q[1]<<"\n \t"<<q[2]<<"\n \t"<<q[3]<<std::endl;
-            std::cout<<"\n Position :\n"<<"\t"<<x_ned<<"\n \t"<<y_ned<<"\n \t"<<z_ned<<std::endl; 
+            std::cout<<"\n Position :\n"<<"\t"<<_xned<<"\n \t"<<_yned<<"\n \t"<<_zned<<std::endl; 
             _cnt = 0;
             }
 
@@ -391,39 +383,3 @@ void serialboost::SerialPort::starttraj()
 
 	_start = strinp;
 }
-// Commented out to avoid confusion between bridge subscriber() vs this testfunc()
-//void serialboost::SerialPort::testfunc()
-//{
-	//boost::posix_time::seconds worktime(3);	
-	//while(1){
-
-//	_subscriber.connect("tcp://127.0.0.1:5556");
-//	_subscriber.setsockopt( ZMQ_SUBSCRIBE, "", 0);
-	
-//	std::cout << "priinting some" << std::endl;	
-
-//	try{
-//		while(true){
-//	for(int up_nbr = 0; up_nbr < 100; up_nbr++){		
-		
-//		zmq::message_t update;
-
-//		_subscriber.recv(&update);
-
-//		int zipcode, temperature, relhumidity;
-//		std::istringstream iss(static_cast<char *>(update.data()));
-//		iss >> zipcode >> temperature >> relhumidity;
-
-//		std::cout << "ZTR" << zipcode << " " << temperature << " " << relhumidity << " " << std::endl;
-	
-//		WriteToPixhawk();
-
-//			}
-//		}
-//	 catch (std::exception &e) {
-
-//	 	std::cout << "Error occurred " << std::endl;
-//	 }		
-	
-//}
-
