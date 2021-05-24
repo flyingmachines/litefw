@@ -780,9 +780,9 @@ void serialboost::SerialPort::sendoffboardcommands()
             }
 
             if(_stopmotors){
-
-            _uxscale = 0.0;
-            _uyscale = 0.0;
+	    
+            //_uxscale = 0.0;
+            //_uyscale = 0.0;
             _uzscale = 0.0;
 
             }
